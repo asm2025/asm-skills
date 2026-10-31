@@ -1,3 +1,11 @@
+# Local/editor state
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+.mirror-metadata.json
+
 # Logs
 logs
 *.log
@@ -38,6 +46,9 @@ bower_components
 build/Release
 
 # Dependency directories
+__pycache__/
+.venv/
+venv/
 node_modules/
 jspm_packages/
 
@@ -147,3 +158,4 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
