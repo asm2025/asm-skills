@@ -1,0 +1,13 @@
+{
+  "name": "essential-skills",
+  "owner": {
+    "name": "asm2025"
+  },
+  "plugins": [
+    {
+      "name": "essential-skills",
+      "source": "./",
+      "description": "document-website: annotated screenshot tutorials as Word, Markdown, or HTML. Includes the Playwright MCP server."
+    }
+  ]
+}

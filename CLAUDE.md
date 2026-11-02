@@ -4,17 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A collection of agent skills (remote: `asm2025/asm-skills`). Each skill is a self-contained folder under `skills/<name>/`:
+A collection of agent skills (remote: `asm2025/essential-skills`). Each skill is a self-contained folder under `skills/<name>/`:
 
 - `SKILL.md`: YAML frontmatter (`name`, `description`) plus the workflow the agent follows. The `description` is the trigger; word it for when the skill should fire.
 - `scripts/`: standalone Python CLIs the workflow shells out to.
 - `references/`: detail disclosed from `SKILL.md`, loaded only when the workflow points at it.
+- `requirements.txt`: the Python packages its scripts import.
+
+The repo is also a Claude Code plugin and its own marketplace (`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`). The plugin ships every folder under `skills/` and registers the Playwright MCP server through `mcpServers` in `plugin.json`. That server lives in `plugin.json`, not in a root `.mcp.json`, so it does not also become a project MCP server when working in this repo. `.claude/skills/` holds dev-only skills and is not shipped. Bump `version` in `plugin.json` when a release should reach installed copies.
 
 There is no build system, package manifest, linter, or test suite. Verification means running the scripts.
 
 ## Running the scripts
 
-Dependencies: `pip install Pillow python-docx` (optional, for right-to-left marker text: `arabic-reshaper python-bidi`). On Windows the interpreter is usually `python`, not `python3`.
+Dependencies: `python -m pip install -r skills/document-website/requirements.txt` (optional, for right-to-left marker text: `arabic-reshaper python-bidi`). On Windows the interpreter is usually `python`, not `python3`. When a script gains or drops an import, update `requirements.txt`, the Dependencies table in `SKILL.md`, and the README's Requirements section together.
 
 ```bash
 python skills/document-website/scripts/annotate.py --help

@@ -1,0 +1,7 @@
+Pillow
+python-docx
+
+# Optional: Arabic, Hebrew, and other right-to-left text in markers.
+# Not needed when Pillow is built with libraqm.
+# arabic-reshaper
+# python-bidi

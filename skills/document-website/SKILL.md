@@ -30,7 +30,7 @@ Before doing anything else, confirm:
   ```
   It picks, in order: a folder the user named (pass it as `--dir <path>`, or set `DOCUMENT_WEBSITE_SCREENSHOTS`); `<temp>/screenshots` when the project has a temp folder (`!tmp`, `tmp`, `temp`, `.tmp`, or `.temp`); otherwise `screenshots/` in the project folder. It creates the folder and prints its absolute path. Add `--sub <name>` to keep one tutorial's screenshots apart. Raw screenshots, annotated images, marker files, and `steps.json` all go here; only the finished tutorial goes to the output file.
 
-Check the dependencies once (see Dependencies) before taking screenshots.
+Check the Python dependencies once before taking screenshots (see Dependencies), so a missing package does not stop the run after the screenshots are taken.
 
 ### 2  Take screenshots with Playwright MCP
 Use the Playwright MCP tools (`browser_navigate`, `browser_resize`, `browser_snapshot`, `browser_take_screenshot`, `browser_click`, `browser_type`, `browser_evaluate`, etc.) available in the active session. Parameter names vary between `@playwright/mcp` releases, so check the tool schema the session lists before calling.
@@ -157,20 +157,34 @@ Exit codes: `0` saved; `1` saved, but an image was missing or unreadable (each o
 
 ## Dependencies
 
-| Package | Purpose | Install |
+| Package | Purpose | Needed for |
 |---|---|---|
-| `python-docx` | Build `.docx` files | `pip install python-docx` |
-| `Pillow` | Image annotation | `pip install Pillow` |
-| `arabic-reshaper`, `python-bidi` | Optional: Arabic, Hebrew, and other right-to-left text in markers | `pip install arabic-reshaper python-bidi` |
-| `@playwright/mcp` | Browser + screenshots | registered as MCP server |
+| `Pillow` | Image annotation | Every run (`annotate.py`) |
+| `python-docx` | Build Word files | `.docx` output only |
+| `arabic-reshaper`, `python-bidi` | Arabic, Hebrew, and other right-to-left text in markers | Optional; `annotate.py` warns when right-to-left text needs them |
+| `@playwright/mcp` | Browser and screenshots | MCP server; the `essential-skills` Claude Code plugin registers it |
 
-Check with:
+The Python packages are listed in `<skill-dir>/requirements.txt`.
+
+**Check** with the same interpreter that will run the scripts:
 ```bash
-python3 -c "import docx, PIL; print('OK')"
+python3 -c "import PIL, docx; print('OK')"
 ```
+Leave out `docx` when the output is `.md` or `.html`.
+
+**If a package is missing**, tell the user which one and ask before installing it. Install with the same interpreter, so the packages land where the scripts look for them:
+```bash
+python3 -m pip install -r <skill-dir>/requirements.txt
+```
+If pip refuses with `externally-managed-environment`, do not pass `--break-system-packages`. Ask the user whether to install with `--user`, or create a virtual environment and run every script with its interpreter.
+
+The scripts also check their own imports: `annotate.py` and a `.docx` build exit with `<package> is not installed. Run: pip install <package>`. Install it as above, then rerun the same command.
+
+**If the Playwright MCP tools are missing** from the session, stop and tell the user to install the `essential-skills` plugin or register `@playwright/mcp` with their agent. Screenshots cannot be taken any other way.
 
 ## Reference Files
 - `references/annotation-spec.md` — marker types, fields, coordinate system, fonts, errors
 - `scripts/annotate.py` — annotation CLI
 - `scripts/build_docx.py` — tutorial assembler CLI (`.docx`, `.md`, `.html`)
 - `scripts/screenshot_dir.py` — picks and creates the screenshots folder
+- `requirements.txt` — Python packages the scripts need
