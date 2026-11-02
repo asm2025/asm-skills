@@ -4,7 +4,7 @@ build_docx.py - Assemble a step-by-step tutorial from a steps JSON file.
 
 The output format follows the --output extension:
     .docx         Word document (needs python-docx)
-    .md           Markdown, linking images by path relative to the output file
+    .md           Markdown, with the images copied into <name>_images/ beside it
     .html / .htm  one self-contained HTML file with the images embedded
 
 Usage:
@@ -37,6 +37,7 @@ import base64
 import html
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -193,7 +194,16 @@ def md_text(text: str) -> str:
 
 
 def build_md(title: str, steps: list, output: Path) -> list:
+    """Write Markdown and copy every image into <name>_images/ beside it.
+
+    Copying keeps the tutorial working when the screenshots live in a temporary
+    folder, and lets the .md and its images folder be shared together.
+    """
     problems, out = [], [f"# {md_text(title)}", ""]
+    images_dir = output.parent / f"{output.stem}_images"
+    if images_dir.exists():
+        shutil.rmtree(images_dir)  # drop images from an earlier build
+    copied = {}  # source path -> copy, so an image used twice is copied once
     for step in steps:
         out += [f"## {md_text(step['heading'])}", ""]
         for para in paragraphs(step["body"]):
@@ -202,9 +212,15 @@ def build_md(title: str, steps: list, output: Path) -> list:
             if path is None:
                 problems.append(f"Image not found: {written}")
                 out += [f"**[Image not found: {md_text(written)}]**", ""]
-            else:
-                alt = md_text(step["caption"] or step["heading"]).replace("]", "\\]")
-                out += [f"![{alt}]({md_link(path, output)})", ""]
+                continue
+            src = path.resolve()
+            if src not in copied:
+                images_dir.mkdir(parents=True, exist_ok=True)
+                copy = images_dir / f"{len(copied) + 1:02d}-{path.name}"
+                shutil.copyfile(src, copy)
+                copied[src] = copy
+            alt = md_text(step["caption"] or step["heading"]).replace("]", "\\]")
+            out += [f"![{alt}]({md_link(copied[src], output)})", ""]
         if step["caption"]:
             out += [f"*{md_text(step['caption'])}*", ""]
     output.write_text("\n".join(out), encoding="utf-8", newline="\n")

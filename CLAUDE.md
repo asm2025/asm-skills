@@ -29,6 +29,7 @@ Pipeline: Playwright MCP screenshots, then `annotate.py` draws markers on them, 
 
 - `annotate.py` dispatches marker types through the `DRAWERS` dict. `references/annotation-spec.md` is the user-facing schema for the same markers; any marker type, field, default, warning, or exit-code change goes in both places.
 - `build_docx.py` reads a `steps.json` array of `{heading?, body?, image?, caption?}` (`image` may be a list). That format is also documented in `SKILL.md` step 5; keep the two in sync.
+- `screenshot_dir.py` picks the screenshots folder (`--dir`, then `DOCUMENT_WEBSITE_SCREENSHOTS`, then `<temp>/screenshots` for a project temp folder, then `screenshots/`). Its rules are also documented in `SKILL.md` step 1; keep the two in sync.
 - Script paths in `SKILL.md` use `<skill-dir>` (the folder holding `SKILL.md`), so they work wherever the skill is installed. Never write repo-root paths like `skills/document-website/scripts/...` there.
 
 ## Verifying changes

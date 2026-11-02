@@ -43,6 +43,7 @@ Keep implementation details out of the map. Name only user paths, stable handles
 - [Annotate markers](./annotate-markers.md) covers all four marker types with default and custom fields, colors, arrow tail flipping, text centering, UTF-8 marker files, font fallback, and right-to-left text.
 - [Annotation input checks](./annotate-checks.md) covers invalid markers and JSON, missing files, unknown types, off-image markers, missing glyphs, `--font`, and unshaped right-to-left text.
 - [Build the Word tutorial](./build-docx.md) covers title, headings, paragraphs, image lists and sizing, captions, default headings, relative image lookup, missing and unreadable images, invalid steps, UTF-8 with a byte order mark, output folders, and locked output files.
-- [Build Markdown and HTML tutorials](./build-md-html.md) covers structure, relative links, escaping, embedded images, and missing images for `.md` and `.html` output.
+- [Build Markdown and HTML tutorials](./build-md-html.md) covers structure, copied Markdown images, escaping, embedded HTML images, rebuilds, and missing images for `.md` and `.html` output.
+- [Screenshots folder](./screenshot-dir.md) covers how the screenshots folder is picked: `--dir`, the environment variable, project temp folders, the default, `--sub`, `--project`, and the outside-the-project warning.
 - [Documented examples](./spec-examples.md) covers running every JSON and command example from `annotation-spec.md` and `SKILL.md` as written, from a project outside the repo.
 - [Tutorial pipeline](./tutorial-pipeline.md) covers screenshot, element coordinates, annotation, and `.docx`, end to end.

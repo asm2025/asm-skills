@@ -159,3 +159,7 @@ vite.config.ts.timestamp-*
 # Turbo Repo
 .turbo
 
+
+# Playwright MCP output and document-website screenshots
+.playwright-mcp/
+/screenshots/

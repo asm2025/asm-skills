@@ -9,6 +9,7 @@ The thing under test is `skills/document-website/`: two Python CLIs that an agen
 
 - `scripts/annotate.py` draws markers (`arrow`, `circle`, `box`, `label`) onto a PNG.
 - `scripts/build_docx.py` turns a `steps.json` array into a tutorial: `.docx`, `.md`, or `.html`, by the `--output` extension.
+- `scripts/screenshot_dir.py` picks and creates the folder the screenshots go in.
 
 The "user" is an agent that copies commands and JSON from `skills/document-website/SKILL.md` and `references/annotation-spec.md`. Verify by running those commands, not by importing functions. The Playwright screenshot and coordinate steps are agent actions, not scripts. Only `features/tutorial-pipeline.md` touches them.
 
@@ -20,13 +21,14 @@ There is no server. "Launch" means: an isolated venv with the dependencies, plus
 
 ```bash
 VDW=.claude/skills/verify-document-website/scripts/vdw.py
-eval "$(python "$VDW" setup | sed 's/^/export /')"   # sets PY and RUN
-echo "PY=$PY RUN=$RUN"
+eval "$(python "$VDW" setup | sed 's/^/export /')"   # sets PY, RUN, and SHOTS
+echo "PY=$PY RUN=$RUN SHOTS=$SHOTS"
 ```
 
 - Use `python` on Windows, `python3` on macOS/Linux, for this one call only. From here on, use `"$PY"` (the venv interpreter) for everything.
 - `setup` creates `<tempdir>/verify-document-website/venv` the first time (about 20 s with network) and reuses it after that. It runs `pip install Pillow python-docx arabic-reshaper python-bidi` each time, which is a no-op when they are already installed.
 - Every `setup` call makes a new `RUN=<tempdir>/verify-document-website/runs/<timestamp>-<pid>/` with `work/` (inputs, scratch) and `evidence/` (proof).
+- `SHOTS=<screenshots folder>/vdw-<run id>` is where browser screenshots go: the Playwright MCP refuses to write outside the repo. The screenshots folder is the one the skill's `screenshot_dir.py` picks for the repo (`<repo>/screenshots/`, git-ignored, unless the repo has a temp folder). `cleanup` deletes `$SHOTS`, and the screenshots folder too when it is left empty; copy anything you keep into `$RUN`.
 - Ready means `doctor` exits 0.
 
 Parallel runs: each `setup` call gets its own `RUN`, so runs never share files. The venv is shared, so run `setup` once on its own before starting parallel runs, so that two first-time `pip install`s do not race.

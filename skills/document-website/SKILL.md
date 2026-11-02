@@ -23,7 +23,12 @@ Before doing anything else, confirm:
 - **Target URL** — read it from the conversation or task description; never guess.
 - **Output format** — default is `.docx` (Word); use `.md` or `.html` if the user asks.
 - **Sections / steps to document** — derive from the user's description or navigate the site to discover them.
-- **Output directory** — default to `./docs/screenshots/` for images and `./docs/` for the final file.
+- **Output file** — default to `./docs/tutorial.<ext>` in the project folder, unless the user names another path.
+- **Screenshots folder** (`<shots>` below) — run this from the project folder and use the path it prints:
+  ```bash
+  python3 <skill-dir>/scripts/screenshot_dir.py
+  ```
+  It picks, in order: a folder the user named (pass it as `--dir <path>`, or set `DOCUMENT_WEBSITE_SCREENSHOTS`); `<temp>/screenshots` when the project has a temp folder (`!tmp`, `tmp`, `temp`, `.tmp`, or `.temp`); otherwise `screenshots/` in the project folder. It creates the folder and prints its absolute path. Add `--sub <name>` to keep one tutorial's screenshots apart. Raw screenshots, annotated images, marker files, and `steps.json` all go here; only the finished tutorial goes to the output file.
 
 Check the dependencies once (see Dependencies) before taking screenshots.
 
@@ -35,29 +40,41 @@ Set one viewport size before the first screenshot so every image in the tutorial
 browser_resize  width=1280  height=720
 ```
 
-Always pass `filename` with an **absolute** path. A relative `filename` resolves against the MCP server's workspace root, which may not be the project folder, and without `filename` the tool saves `page-<timestamp>.png` to its own output directory.
+Always pass `filename` as an absolute path in `<shots>`, and pass `scale="css"`:
+- The Playwright MCP only writes inside its allowed roots (the project folder and the MCP's own output folder); a path elsewhere fails with "File access denied ... outside allowed roots". `screenshot_dir.py` warns when `<shots>` is outside the project.
+- A relative `filename` resolves against the MCP server's workspace root, which may not be the folder you expect.
+- Without `filename`, the tool saves `page-<timestamp>.png` to its own output folder.
+- `scale="css"` (required by some releases) makes one image pixel equal one CSS pixel, so element positions from the page match image coordinates. Never use `scale="device"`.
 
-**Viewport or full-page screenshot**
+The MCP also writes page snapshots (`.yml`) to its output folder, `<project>/.playwright-mcp/` unless the MCP server was started with `--output-dir`. Add that folder, and `<shots>` if it is not already in an ignored temp folder, to the project's `.gitignore`.
+
+**Viewport screenshot**
 ```
 browser_navigate         url="<URL>"
-browser_take_screenshot  filename="<project>/docs/screenshots/<step_name>.png"
-browser_take_screenshot  filename="<project>/docs/screenshots/<step_name>_full.png"  fullPage=true
+browser_take_screenshot  scale="css"  filename="<shots>/<step_name>.png"
 ```
+
+**Full-page screenshot**
+A full-page capture drops the page's scrollbar, which shifts centered content sideways. Hide the scrollbar first and measure (step 3) in that same state, then capture:
+```
+browser_evaluate         function="() => { document.documentElement.style.overflow = 'hidden'; scrollTo(0, 0); }"
+browser_take_screenshot  scale="css"  fullPage=true  filename="<shots>/<step_name>_full.png"
+browser_evaluate         function="() => { document.documentElement.style.overflow = ''; }"
+```
+Run the last line before interacting with the page again.
 
 **Element screenshot**
 To capture only one section, take an accessibility snapshot first, then screenshot that element by its reference. Current releases call the reference parameter `target` (older ones call it `ref`); pass `element`, a human-readable description of the element, alongside it.
 
 ```
 browser_snapshot
-browser_take_screenshot  element="Sign-up form"  target="<reference from snapshot>"  filename="<project>/docs/screenshots/<step_name>.png"
+browser_take_screenshot  scale="css"  element="Sign-up form"  target="<reference from snapshot>"  filename="<shots>/<step_name>.png"
 ```
 
 There is no clip-by-coordinates option. To capture a region that is not a single element, screenshot the viewport and place markers on the region instead. `fullPage` cannot be combined with an element screenshot.
 
-Leave `scale` at its default (`css`), so one image pixel equals one CSS pixel and element positions from the page match image coordinates.
-
 ### 3  Find marker coordinates
-Never guess coordinates from looking at a screenshot; markers land off target. Read them from the page:
+Never guess coordinates from looking at a screenshot; markers land off target. Read them from the page, in the same scroll and scrollbar state as the screenshot:
 
 - `browser_snapshot boxes=true` lists each element with `[box=x,y,width,height]` in CSS pixels relative to the viewport.
 - Or run `browser_evaluate` with `() => { const r = document.querySelector('<selector>').getBoundingClientRect(); return [r.x, r.y, r.width, r.height, scrollX, scrollY]; }`.
@@ -67,7 +84,7 @@ Convert a box `x, y, w, h` to image pixels for the screenshot you took:
 | Screenshot | Image x, y |
 |---|---|
 | Viewport | `x, y` |
-| Full page | `x + scrollX, y + scrollY` (read the scroll offset in the same call) |
+| Full page | `x + scrollX, y + scrollY`, measured with the scrollbar hidden as in step 2 (after `scrollTo(0, 0)` the offset is 0) |
 | Element | `x - ex, y - ey`, where `ex, ey` is the screenshotted element's box |
 
 Then point markers at the box: an arrow `to` the box's left-middle `[x, y + h/2]` or center, a `box` with `rect` `[x - 4, y - 4, w + 8, h + 8]`, a `circle` just outside a corner.
@@ -77,9 +94,9 @@ Write the markers to a JSON file and pass `--markers-file`. Inline `--markers` J
 
 ```bash
 python3 <skill-dir>/scripts/annotate.py \
-  --input  ./docs/screenshots/<step_name>.png \
-  --output ./docs/screenshots/<step_name>_annotated.png \
-  --markers-file ./docs/screenshots/<step_name>_markers.json
+  --input  <shots>/<step_name>.png \
+  --output <shots>/<step_name>_annotated.png \
+  --markers-file <shots>/<step_name>_markers.json
 ```
 
 `<step_name>_markers.json`:
@@ -96,12 +113,12 @@ See `references/annotation-spec.md` for every marker type and field.
 Use annotated images (the `_annotated.png` variants) in the final document.
 
 ### 5  Assemble the document
-Write a `steps.json` file, then build. The output format follows the `--output` extension: `.docx`, `.md`, or `.html`.
+Write `<shots>/steps.json`, then build. The output format follows the `--output` extension: `.docx`, `.md`, or `.html`.
 
 ```bash
 python3 <skill-dir>/scripts/build_docx.py \
   --title "Tutorial Title" \
-  --steps ./docs/steps.json \
+  --steps <shots>/steps.json \
   --output ./docs/tutorial.docx
 ```
 
@@ -111,7 +128,7 @@ python3 <skill-dir>/scripts/build_docx.py \
   {
     "heading": "Step 1: Log in",
     "body": "Open the login page.\n\nEnter your email and password, then choose Sign in.",
-    "image": "./docs/screenshots/login_annotated.png",
+    "image": "login_annotated.png",
     "caption": "The login page"
   }
 ]
@@ -124,10 +141,10 @@ python3 <skill-dir>/scripts/build_docx.py \
 | `image` | — | Screenshot path, or a list of paths for several screenshots in one step |
 | `caption` | — | Small italic line under the image(s) |
 
-A relative `image` path is looked up from the current folder first, then from the folder that holds `steps.json`.
+A relative `image` path is looked up from the current folder first, then from the folder that holds `steps.json`, so plain file names work when both are in `<shots>`.
 
 - **Word:** images keep their on-screen size, shrunk to fit 6 x 8 inches; small element screenshots are not enlarged. PNG and JPEG work; WebP does not.
-- **Markdown:** images are linked by path relative to the `.md` file, so keep the screenshots next to it when sharing.
+- **Markdown:** images are copied into `<name>_images/` beside the `.md` file (replaced on each build) and linked from there, so the tutorial keeps working after `<shots>` is cleaned up. Share the `.md` together with that folder.
 - **HTML:** one file with every image embedded, ready to share on its own.
 
 Exit codes: `0` saved; `1` saved, but an image was missing or unreadable (each one becomes a red `[Image ...]` line in the document and an `[error]` line on stderr), or the file could not be written (for example, it is open in Word); `2` invalid `steps.json` or arguments, nothing written. On `1` or `2`, fix the cause and rebuild.
@@ -156,3 +173,4 @@ python3 -c "import docx, PIL; print('OK')"
 - `references/annotation-spec.md` — marker types, fields, coordinate system, fonts, errors
 - `scripts/annotate.py` — annotation CLI
 - `scripts/build_docx.py` — tutorial assembler CLI (`.docx`, `.md`, `.html`)
+- `scripts/screenshot_dir.py` — picks and creates the screenshots folder

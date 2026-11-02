@@ -58,6 +58,17 @@ def cmd_setup(a):
     (run / "evidence").mkdir(parents=True)
     print(f"PY={posix(py)}")
     print(f"RUN={posix(run)}")
+    # The Playwright MCP only writes inside the repo, so browser screenshots land in the
+    # folder the skill's own screenshot_dir.py picks for this repo, in a per-run subfolder.
+    print(f"SHOTS={posix(shots_dir(run))}")
+
+
+def shots_dir(run: Path) -> Path:
+    sys.dont_write_bytecode = True  # keep __pycache__ out of the repo
+    sys.path.insert(0, str(SCRIPTS))
+    import screenshot_dir
+    base, _ = screenshot_dir.resolve(REPO)
+    return base / f"vdw-{Path(run).name}"
 
 
 # --------------------------------------------------------------------------- doctor
@@ -190,7 +201,8 @@ def cmd_probe(a):
     print(f"{posix(Path(a.image))} size {img.size[0]}x{img.size[1]}")
     for pt in a.at:
         x, y = (int(v) for v in pt.split(","))
-        print(f"({x},{y}) {img.getpixel((x, y))}")
+        inside = 0 <= x < img.size[0] and 0 <= y < img.size[1]
+        print(f"({x},{y}) {img.getpixel((x, y)) if inside else 'outside the image'}")
 
 
 def cmd_find(a):
@@ -198,6 +210,8 @@ def cmd_find(a):
     img = Image.open(a.image).convert("RGB")
     want = tuple(int(v) for v in a.color.split(","))
     x0, y0, x1, y1 = (int(v) for v in a.region.split(",")) if a.region else (0, 0, *img.size)
+    x0, y0 = max(0, x0), max(0, y0)  # clamp the region to the image
+    x1, y1 = min(img.size[0], x1), min(img.size[1], y1)
     xs, ys = [], []
     for y in range(y0, y1):
         for x in range(x0, x1):
@@ -276,6 +290,12 @@ def cmd_cleanup(a):
         print(f"removed {posix(work)}")
     ev = run / "evidence"
     kept = sorted(p.name for p in ev.iterdir()) if ev.exists() else []
+    shots = shots_dir(run)
+    if shots.exists():
+        shutil.rmtree(shots)
+        print(f"removed {posix(shots)}")
+    if shots.parent.is_dir() and not any(shots.parent.iterdir()):
+        shots.parent.rmdir()  # the screenshots folder only held this run's subfolder
     print(f"kept evidence {posix(ev)}: {', '.join(kept) or '(empty)'}")
     if a.venv and (root / "venv").exists():
         shutil.rmtree(root / "venv")
