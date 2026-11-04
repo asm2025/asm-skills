@@ -38,6 +38,6 @@ Preconditions:
 
 ## Gotchas
 
-- `--no-auto-contrast` is part of every command here; without it a later release may swap a color that lands on a similar background.
+- `--no-auto-contrast` is part of every command here; without it auto-contrast may swap a color that lands on a similar background, and print a `[warn]`.
 - Write the BOM file with `printf '\xef\xbb\xbf...'`; an editor or `echo` may drop or double the BOM.
 - The `style-err.png` output is shared by the error runs on purpose: it must not exist after `style-err-value`, and exists after `style-err-warn`. Run them in the order listed.

@@ -107,6 +107,7 @@ python3 <skill-dir>/scripts/annotate.py \
 See `references/annotation-spec.md` for every marker type and field.
 
 - Exit code `2` means invalid markers or arguments; each problem is listed as `[error] marker <n> ...` and nothing is written. Fix and rerun.
+- Colors come from the marker, then `--color`/`--bg`/`--fg`, then `--style` (see `references/style-file.md`). A `[warn]` about a swapped color is expected, not a failure: auto-contrast changed a color that blended into the screenshot.
 - Read every `[warn]` line. A marker outside or cut off at the image edge usually means wrong coordinates (see step 3). A missing-font or right-to-left warning means some text will not render correctly.
 - Open each annotated image and check that every marker points at the right element.
 

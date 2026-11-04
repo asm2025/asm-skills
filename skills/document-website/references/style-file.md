@@ -28,11 +28,15 @@ Keep the file in UTF-8 (a byte order mark is fine). Write it once and pass the s
 | `markers.circle.radius`, `.bg`, `.fg`, `.auto_contrast` | number >= 1, color, color, true/false | `18`, `#E53935`, `#FFFFFF`, on | Circle settings |
 | `markers.box.color`, `.width`, `.radius`, `.auto_contrast` | color, number >= 1, number >= 0, true/false | `#E53935`, `3`, `6`, on | Box settings |
 | `markers.label.bg`, `.fg`, `.font_size`, `.auto_contrast` | color, color, number >= 1, true/false | `#E53935`, `#FFFFFF`, `16`, on | Label settings |
-| `markers.auto_contrast` | true/false | `true` | Contrast switch; read now, takes effect in a later release |
-| `markers.min_contrast` | number 1 to 21 | `3.0` | Contrast threshold; read now, takes effect in a later release |
-| `markers.palette` | list of colors | built-in palette | Replacement colors to try first; read now, takes effect in a later release |
+| `markers.auto_contrast` | true/false | `true` | Contrast switch; `false` turns auto-contrast off for every marker |
+| `markers.min_contrast` | number 1 to 21 | `3.0` | Lowest contrast ratio a marker color may have against the screenshot before it is swapped |
+| `markers.palette` | list of colors | built-in palette | Replacement colors tried first when a color is swapped, before the built-in red, blue, yellow, black, white |
 
 Colors are any CSS color: `"#E53935"`, `"#F00"`, `"rgb(229, 57, 53)"`, or a name such as `"orange"`. A per-type block accepts only that type's fields; positions and text (`to`, `from`, `at`, `rect`, `label`, `text`) are never allowed.
+
+## Auto-contrast keys
+
+`annotate.py` swaps a marker color that blends into the screenshot (see `annotation-spec.md`, "Auto-contrast"). `markers.auto_contrast` turns it off for the whole file, a per-type `auto_contrast` turns it off for one marker type, and `--no-auto-contrast` turns it off for one run. `markers.min_contrast` is the lowest contrast ratio (WCAG, 1 to 21) a color may have; raise it to be stricter. `markers.palette` lists the colors tried first, in order, before the built-in `#E53935`, `#1565C0`, `#FDD835`, `#000000`, `#FFFFFF`. Circle and label text always needs 3.0:1 on its own fill, whatever `min_contrast` says. Each swap prints a `[warn]`.
 
 ## Which value wins
 

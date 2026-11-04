@@ -132,6 +132,18 @@ def cmd_doctor(a):
 def cmd_fixture(a):
     from PIL import Image, ImageDraw
     w, h = (int(v) for v in a.size.lower().split("x"))
+    if a.kind == "contrast":
+        # Four full-height strips, a quarter of the width each.
+        colors = [(232, 131, 58), (0, 0, 0), (255, 255, 255), (119, 119, 119)]
+        img = Image.new("RGB", (w, h))
+        d = ImageDraw.Draw(img)
+        for i, col in enumerate(colors):
+            d.rectangle([w * i // 4, 0, w * (i + 1) // 4 - 1, h - 1], fill=col)
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        img.save(a.out)
+        print(f"fixture {posix(Path(a.out))} {w}x{h}: four strips, orange (232,131,58), "
+              f"black (0,0,0), white (255,255,255), gray (119,119,119), each {w // 4} px wide")
+        return
     img = Image.new("RGB", (w, h), (245, 246, 248))            # page background
     d = ImageDraw.Draw(img)
     d.rectangle([0, 0, w, 64], fill=(33, 47, 61))               # header bar
@@ -319,6 +331,8 @@ def main():
     p = sp.add_parser("fixture", help="write a synthetic 'web page' PNG with known colors")
     p.add_argument("--out", required=True)
     p.add_argument("--size", default="1280x720")
+    p.add_argument("--kind", choices=["form", "contrast"], default="form",
+                   help="form: the page with buttons (default); contrast: four color strips")
     p.set_defaults(fn=cmd_fixture)
 
     p = sp.add_parser("run", help="run a command from the repo root and record it as evidence")

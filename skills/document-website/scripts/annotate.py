@@ -37,6 +37,8 @@ except ImportError:
     sys.exit("Pillow is not installed. Run: pip install Pillow")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from contrast import (BUILTIN_PALETTE, TEXT_MIN_CONTRAST, choose,  # noqa: E402,F401
+                      ratio, ring, score, text_on)
 from style_file import (MARKER_FIELDS, StyleError, load_style,  # noqa: E402
                         parse_color, validate_markers)
 
@@ -388,14 +390,74 @@ def resolve(m: dict, mtype: str, defaults: dict) -> dict:
     return out
 
 
+# The field that carries each marker type's main color.
+MAIN_COLOR = {"arrow": "color", "box": "color", "circle": "bg", "label": "bg"}
+RING_WIDTH = 3
+
+
+def _hex(rgb) -> str:
+    return "#{:02X}{:02X}{:02X}".format(*rgb)
+
+
+def settle_colors(canvas: Canvas, scratch: Canvas, img, mtype: str, marker: dict,
+                  min_contrast: float, palette) -> dict:
+    """Return the marker with colors swapped where they would blend into the screenshot.
+
+    The marker is drawn once on the scratch canvas to learn its footprint. Only a
+    crop around it is measured, so a tall full-page screenshot stays fast. The
+    scratch canvas is cleared again and its warnings are discarded: font and
+    right-to-left warnings come from the real draw.
+    """
+    scratch.where = canvas.where
+    bx0, by0, bx1, by1 = DRAWERS[mtype](scratch, marker)
+    scratch.warnings.clear()
+    pad = RING_WIDTH + 1
+    w, h = img.size
+    box = (max(0, math.floor(bx0) - pad), max(0, math.floor(by0) - pad),
+           min(w, math.ceil(bx1) + pad + 1), min(h, math.ceil(by1) + pad + 1))
+    if box[0] >= box[2] or box[1] >= box[3]:
+        return marker  # entirely off the image: nothing to measure
+    alpha = scratch.overlay.crop(box).getchannel("A")
+    scratch.overlay.paste((0, 0, 0, 0), box)  # clear it for the next marker
+    mask = ring(alpha, RING_WIDTH)
+    background = img.crop(box).convert("RGB")
+
+    field = MAIN_COLOR[mtype]
+    out = dict(marker)
+    old = color(marker, field, DEFAULT_RED)
+    new, new_score = choose(background, mask, old, palette or [], min_contrast)
+    if new != old:
+        old_score = score(background, mask, old)
+        canvas.warnings.append(
+            f"{canvas.where}: {field} {_hex(old)} has {old_score:.1f}:1 contrast on the "
+            f"background; drew {_hex(new)} instead ({new_score:.1f}:1).")
+        out[field] = _hex(new)
+    else:
+        out[field] = _hex(old)
+
+    if mtype in ("circle", "label"):
+        has_text = bool(str(marker.get("label" if mtype == "circle" else "text", "")).strip())
+        if has_text:
+            fg = color(marker, "fg", WHITE)
+            fill = color(out, "bg", DEFAULT_RED)
+            drawn = text_on(fill, fg)
+            if drawn != fg:
+                canvas.warnings.append(
+                    f"{canvas.where}: fg {_hex(fg)} has {ratio(fg, fill):.1f}:1 contrast on "
+                    f"bg {_hex(fill)}; drew {_hex(drawn)} instead ({ratio(drawn, fill):.1f}:1).")
+                out["fg"] = _hex(drawn)
+    return out
+
+
 def annotate(input_path: str, output_path: str, markers: list, font: str = None,
              defaults: dict = None, auto_contrast: bool = True,
              min_contrast: float = 3.0, palette: list = None):
     """Draw markers onto input_path and save output_path.
 
     defaults is {"cli": {...}, "style": markers_section}; see resolve().
-    auto_contrast, min_contrast, and palette are accepted for the contrast
-    check and have no effect yet.
+    With auto_contrast on (and not switched off for a marker), a marker color
+    that would blend into the screenshot is swapped for one that stands out,
+    using min_contrast and the style palette; each swap adds a warning.
 
     Returns the list of warnings. Raises MarkerError (nothing written) when a
     marker is invalid, and OSError when a file cannot be read or written.
@@ -407,6 +469,7 @@ def annotate(input_path: str, output_path: str, markers: list, font: str = None,
     img.load()
     img = img.convert("RGBA")
     canvas = Canvas(img.size, font)
+    scratch = Canvas(img.size, font) if auto_contrast else None
     w, h = img.size
     errors = []
 
@@ -421,7 +484,11 @@ def annotate(input_path: str, output_path: str, markers: list, font: str = None,
             continue
         canvas.where = f"marker {i} ({mtype})"
         try:
-            x0, y0, x1, y1 = DRAWERS[mtype](canvas, resolve(m, mtype, defaults))
+            marker = resolve(m, mtype, defaults)
+            if scratch is not None and marker.get("auto_contrast", True) is not False:
+                marker = settle_colors(canvas, scratch, img, mtype, marker,
+                                       min_contrast, palette)
+            x0, y0, x1, y1 = DRAWERS[mtype](canvas, marker)
         except MarkerError as e:
             errors.append(f"marker {i} ({mtype}): {e}")
             continue
