@@ -32,6 +32,8 @@ Keep the file in UTF-8 (a byte order mark is fine). Write it once and pass the s
 | `markers.min_contrast` | number 1 to 21 | `3.0` | Lowest contrast ratio a marker color may have against the screenshot before it is swapped |
 | `markers.palette` | list of colors | built-in palette | Replacement colors tried first when a color is swapped, before the built-in red, blue, yellow, black, white |
 
+Numbers have upper limits: font sizes (`document.*.size`, `document.font_size`, `markers.label.font_size`) up to 1638, `width` and `radius` up to 10000, and page margins up to 20 inches; a larger value is an `[error]` like any invalid value.
+
 Colors are any CSS color: `"#E53935"`, `"#F00"`, `"rgb(229, 57, 53)"`, or a name such as `"orange"`. A per-type block accepts only that type's fields; positions and text (`to`, `from`, `at`, `rect`, `label`, `text`) are never allowed.
 
 ## `document` section
@@ -52,10 +54,10 @@ Colors are any CSS color: `"#E53935"`, `"#F00"`, `"rgb(229, 57, 53)"`, or a name
 
 | Key | Type | Meaning |
 |---|---|---|
-| `document.font`, `.font_size`, `.color` | text, number > 0, color | Body text (the Word `Normal` style; HTML `body`) |
+| `document.font`, `.font_size`, `.color` | text, number > 0 and <= 1638, color | Body text (the Word `Normal` style; HTML `body`) |
 | `document.title`, `.heading`, `.caption` | block | The title (`Title`, HTML `h1`), step headings (`Heading 2`, `h2`), and captions (`Caption`, `figcaption`) |
-| `.font`, `.size`, `.color`, `.bold`, `.italic`, `.align` | text, number > 0, color, true/false, true/false, `left`/`center`/`right` | Fields of a `title`, `heading`, or `caption` block |
-| `document.page.size`, `.margins_in` | `letter` or `a4`, number >= 0 | Page size and all four margins, in inches (Word only, and not with `--template`) |
+| `.font`, `.size`, `.color`, `.bold`, `.italic`, `.align` | text, number > 0 and <= 1638, color, true/false, true/false, `left`/`center`/`right` | Fields of a `title`, `heading`, or `caption` block |
+| `document.page.size`, `.margins_in` | `letter` or `a4`, number from 0 to 20 | Page size and all four margins, in inches (Word only, and not with `--template`) |
 
 Every key is optional; a key you leave out keeps the built-in look (or the template's). In Word the settings go on the styles, never on single paragraphs, so a change in Word's style gallery still works. For `.html` the same keys become CSS (point sizes in `pt`) after the built-in stylesheet, and `--css <file>` adds a stylesheet after that, so it wins. `.md` ignores the style file. The style file wins over a `--template` for the keys it names; the template keeps everything else. `page` settings are ignored with a `[warn]` when `--template` is given.
 

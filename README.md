@@ -40,7 +40,7 @@ Or copy a skill's folder into your agent's skills directory, for example `~/.cla
 
 ## Requirements
 
-`document-website` needs Python 3 with the packages in [`skills/document-website/requirements.txt`](skills/document-website/requirements.txt): `Pillow` and `python-docx`. `python-docx` is needed only for Word output. `Pillow` is needed by every script, including `build_docx.py` (it reads the style file). For `.pdf` output you also need one PDF engine installed: Word (Windows only), LibreOffice, or Chrome/Edge. No Python package is involved, and no PDF is made unless you ask for one. For Arabic, Hebrew, and other right-to-left marker text, also install `arabic-reshaper python-bidi` (not needed when Pillow is built with libraqm).
+`document-website` needs Python 3 with the packages in [`skills/document-website/requirements.txt`](skills/document-website/requirements.txt): `Pillow` and `python-docx`. `python-docx` is needed for Word output, for `.pdf` made by Word or LibreOffice, and for `describe_docx.py`; it is not needed for `.md`, `.html`, or a `.pdf` made by Chrome. `Pillow` is needed by every script, including every `build_docx.py` run (it reads the style file). For `.pdf` output you also need one PDF engine installed: Word (Windows only), LibreOffice, or Chrome/Edge. No Python package is involved, and no PDF is made unless you ask for one. For Arabic, Hebrew, and other right-to-left marker text, also install `arabic-reshaper python-bidi` (not needed when Pillow is built with libraqm).
 
 You do not have to install them in advance: the skill checks them before it starts and asks before installing anything missing. Packages must go into the Python the agent runs as `python` (Windows) or `python3` (macOS and Linux).
 

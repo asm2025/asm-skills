@@ -23,7 +23,7 @@ Set these as environment variables in the shell before starting the agent, then 
 
 ## Saved sign-in
 
-This plugin starts its server with `--caps=storage`, which adds `browser_storage_state` and `browser_set_storage_state`. The flag replaces any `PLAYWRIGHT_MCP_CAPS` value, so capabilities set there are lost. To turn the storage tools off, register the server yourself without the flag. To keep other capabilities too, register your own server with them listed together, for example `--caps=storage,vision`:
+This plugin starts its server with `--caps=storage`, which adds `browser_storage_state` and `browser_set_storage_state`. The flag replaces any `PLAYWRIGHT_MCP_CAPS` value, so capabilities set there are lost. To turn the storage tools off, register the server yourself without the flag. To keep other capabilities too, register your own server with them listed together, for example `--caps=storage,vision`, and disable this plugin's `playwright` server in `/mcp` so only one Playwright server runs (see "Keep one Playwright server enabled"):
 
 ```
 claude mcp add playwright-vision -- npx @playwright/mcp@latest --caps=storage,vision
@@ -32,7 +32,7 @@ claude mcp add playwright-vision -- npx @playwright/mcp@latest --caps=storage,vi
 A saved sign-in file is a live session secret: anyone who has it can act as the user on that site. It must never be committed or put in a tracked folder.
 
 1. **Pick the path.** `<temp>/auth/<host>.json`, where `<temp>` is the first project temp folder that exists: `!tmp`, `tmp`, `temp`, `.tmp`, `.temp` (the folders `screenshot_dir.py` looks for). Do not derive it from the screenshots folder: with no temp folder that folder is `<project>/screenshots`, and with `--dir` it can be any tracked folder. If the project has no temp folder, ask the user where to save the file.
-2. **Check it is ignored.** In a git repo, run `git check-ignore -q '<path>'` (quote the path: an unquoted `!tmp` triggers history expansion in bash) and save only when it exits `0`. If it exits `1`, refuse and tell the user why: the path is not git-ignored, so the file could be committed. Offer to add the temp folder to `.gitignore` instead.
+2. **Check it is ignored.** In a git repo, run `git check-ignore -q '<path>'` (quote the path: an unquoted `!tmp` triggers history expansion in bash) and save only when it exits `0`. If it exits `1`, refuse and tell the user why: the path is not git-ignored, so the file could be committed. Offer to add the temp folder to `.gitignore` instead. Outside a git repo the command exits `128` and no check is possible: save only under the temp folder from step 1, and warn the user that the file is a live secret.
 3. **Save** with `browser_storage_state`, after the user has signed in in the Playwright window. Create the `auth` folder first. Remind the user the file is a live session secret.
 4. **Restore** later with `browser_set_storage_state`, in any mode including headless. Sessions expire, so if the site shows its sign-in page again, ask the user to sign in and save again.
 

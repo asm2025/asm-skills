@@ -86,7 +86,7 @@ def main() -> int:
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8")
     try:
-        doc = open_template(Path(args.file))
+        doc = open_template(Path(args.file), label="")
     except StepsError as e:
         print(f"[error] {e}", file=sys.stderr)
         return 2

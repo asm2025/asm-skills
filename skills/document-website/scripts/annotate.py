@@ -38,7 +38,7 @@ except ImportError:
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from contrast import choose, ratio, ring, score, text_on  # noqa: E402
-from style_file import (MARKER_FIELDS, StyleError, load_style,  # noqa: E402
+from style_file import (MARKER_FIELDS, StyleError, json_type, load_style,  # noqa: E402
                         parse_color, validate_markers)
 
 
@@ -464,7 +464,7 @@ def annotate(input_path: str, output_path: str, markers: list, font: str = None,
     """
     defaults = defaults or {}
     if not isinstance(markers, list):
-        raise MarkerError(f"markers must be a JSON array, got {type(markers).__name__}")
+        raise MarkerError(f"markers must be a JSON array, got {json_type(markers)}")
     img = Image.open(input_path)
     img.load()
     img = img.convert("RGBA")

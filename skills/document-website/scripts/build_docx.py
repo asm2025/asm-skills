@@ -67,7 +67,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pdf_engines  # noqa: E402  (used as a module so tests can replace find_engines)
-from style_file import (StyleError, load_style, parse_color,  # noqa: E402
+from style_file import (StyleError, json_type, load_style, parse_color,  # noqa: E402
                         validate_document)
 
 FIELDS = ("heading", "body", "image", "caption")
@@ -104,7 +104,7 @@ def load_steps(path: Path) -> list:
     except json.JSONDecodeError as e:
         raise StepsError(f"{path} is not valid JSON: {e}")
     if not isinstance(raw, list):
-        raise StepsError(f"{path} must contain a JSON array of steps, got {type(raw).__name__}")
+        raise StepsError(f"{path} must contain a JSON array of steps, got {json_type(raw)}")
 
     errors, steps = [], []
     for i, step in enumerate(raw, start=1):
@@ -159,8 +159,12 @@ DOCX_MAIN = "application/vnd.openxmlformats-officedocument.wordprocessingml.docu
 DOTX_MAIN = "application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml"
 
 
-def open_template(path: Path):
-    """Open a .docx or .dotx as a python-docx Document. Raises StepsError for anything else."""
+def open_template(path: Path, label: str = "--template"):
+    """Open a .docx or .dotx as a python-docx Document. Raises StepsError for anything else.
+
+    label prefixes the error text ("--template file not found: ..."); pass "" for none.
+    """
+    pre = f"{label} " if label else ""
     try:
         from docx import Document
         from docx.opc.exceptions import PackageNotFoundError
@@ -168,11 +172,11 @@ def open_template(path: Path):
     except ImportError:
         sys.exit("python-docx is not installed. Run: pip install python-docx")
     if not path.is_file():
-        raise StepsError(f"--template file not found: {path}")
+        raise StepsError(f"{pre}file not found: {path}")
     try:
         data = path.read_bytes()
     except OSError as e:
-        raise StepsError(f"--template cannot be read: {path} ({e.strerror or e})")
+        raise StepsError(f"{pre}cannot be read: {path} ({e.strerror or e})")
     try:
         # python-docx refuses a .dotx because its main part has the template content type,
         # so rewrite that one entry in memory and open the result.
@@ -184,10 +188,12 @@ def open_template(path: Path):
                     content = content.replace(DOTX_MAIN.encode("utf-8"), DOCX_MAIN.encode("utf-8"))
                 zout.writestr(item, content)
         out.seek(0)
-        return Document(out)
+        doc = Document(out)
+        doc.styles["Normal"]  # a Word file always has it; KeyError here means it is not one
+        return doc
     except (PackageNotFoundError, zipfile.BadZipFile, KeyError, ValueError, XMLSyntaxError,
             RuntimeError, NotImplementedError):  # the last two: an encrypted zip
-        raise StepsError(f"--template is not a Word document (.docx or .dotx): {path}")
+        raise StepsError(f"{pre}{'is ' if pre else ''}not a Word document (.docx or .dotx): {path}")
 
 
 def clear_body(doc) -> None:

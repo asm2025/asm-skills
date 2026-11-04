@@ -39,6 +39,7 @@ MARKER_OPTIONS = {"auto_contrast", "min_contrast", "palette"}
 COLOR_FIELDS = {"color", "bg", "fg"}
 # Integer fields and their minimums.
 INT_MINIMUMS = {"width": 1, "radius": 1, "font_size": 1}
+INT_MAXIMUMS = {"width": 10000, "radius": 10000, "font_size": 1638}
 # Box corner radius may be 0.
 BOX_RADIUS_MINIMUM = 0
 
@@ -51,6 +52,25 @@ def parse_color(value) -> tuple:
         return ImageColor.getrgb(str(value))[:3]
     except ValueError:
         raise StyleError(f"not a color: {json.dumps(value)} (use {COLOR_HINT})")
+
+
+def json_type(v) -> str:
+    """The JSON name of a Python value's type: null, boolean, number, string, array, object."""
+    if v is None:
+        return "null"
+    if isinstance(v, bool):
+        return "boolean"
+    if isinstance(v, (int, float)):
+        return "number"
+    if isinstance(v, str):
+        return "string"
+    if isinstance(v, list):
+        return "array"
+    return "object"
+
+
+MAX_FONT_SIZE = 1638   # Word's largest font size, in points
+MAX_MARGIN_IN = 20     # inches; far past any real page
 
 
 def _num(v) -> bool:
@@ -80,7 +100,7 @@ def load_style(path):
         raise StyleError(f"--style file could not be read: {path}: {e}")
     if not isinstance(data, dict):
         raise StyleError(f"style file {path} must contain a JSON object, "
-                         f"got {type(data).__name__}")
+                         f"got {json_type(data)}")
     for key, value in data.items():
         if key in TOP_LEVEL_KEYS:
             sections[key] = value
@@ -104,8 +124,9 @@ def _check_field(prefix: str, field: str, value, mtype: str, source: str) -> lis
         return []
     if field in INT_MINIMUMS:
         minimum = BOX_RADIUS_MINIMUM if (field == "radius" and mtype == "box") else INT_MINIMUMS[field]
-        if not _num(value) or value < minimum:
-            return [f"{where} must be a number >= {minimum}, got {json.dumps(value)}"]
+        maximum = INT_MAXIMUMS[field]
+        if not _num(value) or not minimum <= value <= maximum:
+            return [f"{where} must be a number >= {minimum} and <= {maximum}, got {json.dumps(value)}"]
     return []
 
 
@@ -173,8 +194,8 @@ def _check_doc_value(path: str, field: str, value, source: str) -> list:
         if not isinstance(value, str) or not value.strip():
             return [f"{where} must be a font name (text), got {json.dumps(value)}"]
     elif field in ("font_size", "size") and not path.startswith("document.page"):
-        if not _num(value) or value <= 0:
-            return [f"{where} must be a number > 0, got {json.dumps(value)}"]
+        if not _num(value) or not 0 < value <= MAX_FONT_SIZE:
+            return [f"{where} must be a number > 0 and <= {MAX_FONT_SIZE}, got {json.dumps(value)}"]
     elif field in ("bold", "italic"):
         if not isinstance(value, bool):
             return [f"{where} must be true or false, got {json.dumps(value)}"]
@@ -185,8 +206,8 @@ def _check_doc_value(path: str, field: str, value, source: str) -> list:
         if value not in PAGE_SIZES:
             return [f"{where} must be one of {', '.join(PAGE_SIZES)}, got {json.dumps(value)}"]
     elif field == "margins_in":
-        if not _num(value) or value < 0:
-            return [f"{where} must be a number >= 0, got {json.dumps(value)}"]
+        if not _num(value) or not 0 <= value <= MAX_MARGIN_IN:
+            return [f"{where} must be a number >= 0 and <= {MAX_MARGIN_IN}, got {json.dumps(value)}"]
     return []
 
 

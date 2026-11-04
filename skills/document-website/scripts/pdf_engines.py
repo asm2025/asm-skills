@@ -128,7 +128,6 @@ try {
     $word.DisplayAlerts = 0
     $doc = $word.Documents.Open($env:DW_IN, $false, $true)
     $doc.ExportAsFixedFormat($env:DW_OUT, 17)
-    $doc.Close(0)
 } finally {
     if ($doc -ne $null) {
         try { $doc.Close(0) } catch {}

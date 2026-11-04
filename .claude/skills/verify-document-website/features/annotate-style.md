@@ -27,12 +27,14 @@ Preconditions:
 - **Precedence.** Run the same command as `style-file` with `--color "#00FF00"` added, named `style-precedence`, output `$RUN/evidence/style-precedence.png`. Exit `0`. `probe --at 101,150` is `(0, 255, 0)`: the command line beat the style file.
 - **Errors.** Run each, named as shown, with `--input "$RUN/work/page.png" --output "$RUN/evidence/style-err.png" --no-auto-contrast --markers '[]'` plus the `--style` value:
   - `style-err-missing`: `--style "$RUN/work/nope.json"`. Exit `2`, stderr `[error] --style file not found:`.
-  - `style-err-array`: after `printf '%s' '[1]' > "$RUN/work/style-array.json"`, `--style "$RUN/work/style-array.json"`. Exit `2`, stderr `[error] style file ... must contain a JSON object`.
+  - `style-err-array`: after `printf '%s' '[1]' > "$RUN/work/style-array.json"`, `--style "$RUN/work/style-array.json"`. Exit `2`, stderr `[error] style file ... must contain a JSON object, got array`.
   - `style-err-value`: after `printf '%s' '{"markers":{"circle":{"radius":"big"}}}' > "$RUN/work/style-bad.json"`, `--style "$RUN/work/style-bad.json"`. Exit `2`, stderr `[error] style file ...: markers.circle.radius must be a number >= 1, got "big"` then `[error] Nothing was written.`; `ls "$RUN/evidence/style-err.png"` fails.
   - `style-err-warn`: after `printf '\xef\xbb\xbf{"markers":{"circle":{"colour":"#000"}},"extra":1}' > "$RUN/work/style-bom.json"`, `--style "$RUN/work/style-bom.json"`. Exit `0`, stderr has `[warn] style file ...: unknown key markers.circle.colour` and `[warn] style file ...: unknown key extra`; `style-err.png` now exists.
   - `style-err-dir`: `--style "$RUN/work"` (a folder). Exit `2`, stderr `[error] --style file could not be read:` then `[error] Nothing was written.`.
   - `style-err-nan`: after `printf '%s' '{"markers":{"circle":{"radius":NaN}}}' > "$RUN/work/style-nan.json"`, `--style "$RUN/work/style-nan.json"`. Exit `2`, stderr `[error] style file ...: markers.circle.radius must be a number >= 1, got NaN`.
   - `style-err-order`: after `printf '%s' '{"extra":1,"markers":{"circle":{"radius":"big"}}}' > "$RUN/work/style-order.json"`, `--style "$RUN/work/style-order.json"`. Exit `2`; stderr shows `[warn] style file ...: unknown key extra` before the `[error]` lines.
+  - `style-err-limits`: after `printf '%s' '{"markers":{"circle":{"radius":1e300},"label":{"font_size":99999}}}' > "$RUN/work/style-big.json"`, `--style "$RUN/work/style-big.json"`. Exit `2`, stderr `markers.circle.radius must be a number >= 1 and <= 10000, got 1e+300` and `markers.label.font_size must be a number >= 1 and <= 1638, got 99999`, then `[error] Nothing was written.`.
+  - `style-err-null`: after `printf 'null' > "$RUN/work/style-null.json"`, `--style "$RUN/work/style-null.json"`. Exit `2`, stderr `must contain a JSON object, got null` (JSON type names: null, boolean, number, string, array, object).
   - No record contains `Traceback`: `grep -l Traceback "$RUN"/evidence/style-*.txt` prints nothing.
 - **Proof.** `$RUN/evidence/` holds the `style-*.txt` records and the `style-cli.png`, `style-file.png`, `style-precedence.png` outputs.
 

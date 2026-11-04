@@ -49,7 +49,7 @@ Always pass `filename` as an absolute path in `<shots>`, and pass `scale="css"`:
 
 The MCP also writes page snapshots (`.yml`) to its output folder, `<project>/.playwright-mcp/` unless the server was started with `--output-dir`. Add that folder, and `<shots>` if it is not already in an ignored temp folder, to the project's `.gitignore`. To keep that folder out of the project, set `PLAYWRIGHT_MCP_OUTPUT_DIR` before the server starts (see `references/browser-modes.md`). Never move or delete `.playwright-mcp/` by hand while the server runs.
 
-**Sign-in.** If a page needs sign-in, follow `references/browser-modes.md`. In the headed browser, ask the user to sign in in the Playwright window and wait for them to say it is done; then offer to save the sign-in for later headless runs. It is a live session secret, so the rule is strict: save it to `<temp>/auth/<host>.json`, where `<temp>` is the first project temp folder `screenshot_dir.py` looks for (`!tmp`, `tmp`, `temp`, `.tmp`, `.temp`), never a path derived from the screenshots folder or `--dir`; ask the user if the project has no temp folder; and refuse to save unless `git check-ignore -q <path>` exits `0`. In headless mode with no saved sign-in, stop and explain the options. When the user says "use my Chrome," use a Playwright server registered with `--extension`, or give the one-line setup from the reference.
+**Sign-in.** If a page needs sign-in, follow `references/browser-modes.md`. In the headed browser, ask the user to sign in in the Playwright window and wait for them to say it is done; then offer to save the sign-in for later headless runs. It is a live session secret, so the rule is strict: save it to `<temp>/auth/<host>.json`, where `<temp>` is the first project temp folder `screenshot_dir.py` looks for (`!tmp`, `tmp`, `temp`, `.tmp`, `.temp`), never a path derived from the screenshots folder or `--dir`; ask the user if the project has no temp folder; and, in a git repo, refuse to save unless `git check-ignore -q '<path>'` exits `0` (quote the path). Outside a git repo that command exits `128`: save only under that temp folder, and warn the user that the file is a live secret. In headless mode with no saved sign-in, stop and explain the options. When the user says "use my Chrome," use a Playwright server registered with `--extension`, or give the one-line setup from the reference.
 
 **Viewport screenshot**
 ```
@@ -169,7 +169,7 @@ Exit codes: `0` saved; `1` saved, but an image was missing or unreadable (each o
 | Package | Purpose | Needed for |
 |---|---|---|
 | `Pillow` | Image annotation, and reading style files | Every run (`annotate.py`, and `build_docx.py` through `style_file.py`) |
-| `python-docx` | Build Word files | `.docx` output only |
+| `python-docx` | Build and read Word files | `.docx` output, `.pdf` made by Word or LibreOffice, and `describe_docx.py` |
 | `arabic-reshaper`, `python-bidi` | Arabic, Hebrew, and other right-to-left text in markers | Optional; `annotate.py` warns when right-to-left text needs them |
 | PDF engine | Word (Windows), LibreOffice, or Chrome/Edge; no Python package | Optional; only for `.pdf` output (`--pdf-engine`) |
 | `@playwright/mcp` | Browser and screenshots | MCP server; the `essential-skills` Claude Code plugin registers it |
@@ -180,7 +180,7 @@ The Python packages are listed in `<skill-dir>/requirements.txt`.
 ```bash
 python3 -c "import PIL, docx; print('OK')"
 ```
-Leave out `docx` when the output is `.md`, `.html`, or a `.pdf` made by Chrome.
+Leave out `docx` when the output is `.md`, `.html`, or a `.pdf` made by Chrome (and you are not running `describe_docx.py`). `PIL` is always needed.
 
 **If a package is missing**, tell the user which one and ask before installing it. Install with the same interpreter, so the packages land where the scripts look for them:
 ```bash
