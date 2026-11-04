@@ -35,6 +35,14 @@ Pipeline: Playwright MCP screenshots, then `annotate.py` draws markers on them, 
 - `screenshot_dir.py` picks the screenshots folder (`--dir`, then `DOCUMENT_WEBSITE_SCREENSHOTS`, then `<temp>/screenshots` for a project temp folder, then `screenshots/`). Its rules are also documented in `SKILL.md` step 1; keep the two in sync.
 - Script paths in `SKILL.md` use `<skill-dir>` (the folder holding `SKILL.md`), so they work wherever the skill is installed. Never write repo-root paths like `skills/document-website/scripts/...` there.
 
+## Plans and specs
+
+Design specs go in `docs/specs/`, implementation plans in `docs/plans/`, both git-tracked and committed with the work. Files are numbered: `<n>. <Title>.md` (for example `docs/specs/1. Document Website Capture and Styling.md`). A spec and the plan built from it share the same number. Take the next number after the highest one in either folder. Companion files keep the plan's name with a suffix: `<n>. <Title>-deferred.md` and `<n>. <Title>-verification.md`.
+
+## Scratch directory
+
+`!tmp/` at the repo root is a temporary directory for throwaway things that need testing and do not need tracking. It is git-ignored (`\!tmp/` in `.gitignore`; the backslash stops the leading `!` from negating the pattern). Put scratch inputs and outputs there, not in tracked folders.
+
 ## Verifying changes
 
 `.claude/skills/verify-document-website/` drives both scripts the way the workflow does and checks pixels and document structure. Use it after any change under `skills/document-website/`, and update its `features/` recipes in the same change when behavior changes.

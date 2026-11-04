@@ -163,3 +163,6 @@ vite.config.ts.timestamp-*
 # Playwright MCP output and document-website screenshots
 .playwright-mcp/
 /screenshots/
+
+# Scratch directory for throwaway tests
+\!tmp/
