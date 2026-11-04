@@ -148,3 +148,67 @@ def validate_markers(section, source: str):
         else:
             warnings.append(f"style file {source}: unknown key markers.{key}")
     return errors, warnings
+
+
+DOC_KEYS = {"font", "font_size", "color"}
+DOC_BLOCKS = {
+    "title":   {"font", "size", "color", "bold", "italic", "align"},
+    "heading": {"font", "size", "color", "bold", "italic", "align"},
+    "caption": {"font", "size", "color", "bold", "italic", "align"},
+    "page":    {"size", "margins_in"},
+}
+ALIGNMENTS = ("left", "center", "right")
+PAGE_SIZES = ("letter", "a4")
+
+
+def _check_doc_value(path: str, field: str, value, source: str) -> list:
+    """Return error strings for one document value (empty when valid)."""
+    where = f"style file {source}: {path}"
+    if field == "color":
+        try:
+            parse_color(value)
+        except StyleError:
+            return [f"{where} must be {COLOR_HINT}, got {json.dumps(value)}"]
+    elif field == "font":
+        if not isinstance(value, str) or not value.strip():
+            return [f"{where} must be a font name (text), got {json.dumps(value)}"]
+    elif field in ("font_size", "size") and not path.startswith("document.page"):
+        if not _num(value) or value <= 0:
+            return [f"{where} must be a number > 0, got {json.dumps(value)}"]
+    elif field in ("bold", "italic"):
+        if not isinstance(value, bool):
+            return [f"{where} must be true or false, got {json.dumps(value)}"]
+    elif field == "align":
+        if value not in ALIGNMENTS:
+            return [f"{where} must be one of {', '.join(ALIGNMENTS)}, got {json.dumps(value)}"]
+    elif field == "size":  # page size
+        if value not in PAGE_SIZES:
+            return [f"{where} must be one of {', '.join(PAGE_SIZES)}, got {json.dumps(value)}"]
+    elif field == "margins_in":
+        if not _num(value) or value < 0:
+            return [f"{where} must be a number >= 0, got {json.dumps(value)}"]
+    return []
+
+
+def validate_document(section, source: str):
+    """Check a "document" section; return (errors, warnings) as lists of text lines."""
+    errors, warnings = [], []
+    if not isinstance(section, dict):
+        return [f"style file {source}: document must be an object, "
+                f"got {json.dumps(section)}"], warnings
+    for key, value in section.items():
+        if key in DOC_KEYS:
+            errors.extend(_check_doc_value(f"document.{key}", key, value, source))
+        elif key in DOC_BLOCKS:
+            if not isinstance(value, dict):
+                errors.append(f"style file {source}: document.{key} must be an object, "
+                              f"got {json.dumps(value)}")
+                continue
+            for field, fvalue in value.items():
+                if field not in DOC_BLOCKS[key]:
+                    warnings.append(f"style file {source}: unknown key document.{key}.{field}")
+                    continue
+                errors.extend(_check_doc_value(f"document.{key}.{field}", field, fvalue, source))
+        else:
+            warnings.append(f"style file {source}: unknown key document.{key}")
+    return errors, warnings

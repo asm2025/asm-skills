@@ -1,6 +1,6 @@
 # Style file
 
-One JSON file sets colors and sizes for the whole tutorial. Pass it with `--style style.json`. `annotate.py` reads the `markers` section. (A `document` section for `build_docx.py` is added later; `annotate.py` ignores it.)
+One JSON file sets colors and sizes for the whole tutorial. Pass it with `--style style.json`. `annotate.py` reads the `markers` section; `build_docx.py` reads the `document` section and ignores `markers` without a warning. `annotate.py` likewise ignores `document`.
 
 Keep the file in UTF-8 (a byte order mark is fine). Write it once and pass the same file to every run so all screenshots match.
 
@@ -34,11 +34,38 @@ Keep the file in UTF-8 (a byte order mark is fine). Write it once and pass the s
 
 Colors are any CSS color: `"#E53935"`, `"#F00"`, `"rgb(229, 57, 53)"`, or a name such as `"orange"`. A per-type block accepts only that type's fields; positions and text (`to`, `from`, `at`, `rect`, `label`, `text`) are never allowed.
 
+## `document` section
+
+```json
+{
+  "document": {
+    "font": "Segoe UI",
+    "font_size": 11,
+    "color": "#1F2328",
+    "title":   {"font": "Segoe UI Semibold", "size": 26, "color": "#0B3D91", "bold": true, "align": "center"},
+    "heading": {"size": 16, "color": "#0B3D91", "bold": true},
+    "caption": {"size": 9, "color": "#666666", "italic": true},
+    "page":    {"size": "letter", "margins_in": 1.0}
+  }
+}
+```
+
+| Key | Type | Meaning |
+|---|---|---|
+| `document.font`, `.font_size`, `.color` | text, number > 0, color | Body text (the Word `Normal` style; HTML `body`) |
+| `document.title`, `.heading`, `.caption` | block | The title (`Title`, HTML `h1`), step headings (`Heading 2`, `h2`), and captions (`Caption`, `figcaption`) |
+| `.font`, `.size`, `.color`, `.bold`, `.italic`, `.align` | text, number > 0, color, true/false, true/false, `left`/`center`/`right` | Fields of a `title`, `heading`, or `caption` block |
+| `document.page.size`, `.margins_in` | `letter` or `a4`, number >= 0 | Page size and all four margins, in inches (Word only, and not with `--template`) |
+
+Every key is optional; a key you leave out keeps the built-in look (or the template's). In Word the settings go on the styles, never on single paragraphs, so a change in Word's style gallery still works. For `.html` the same keys become CSS (point sizes in `pt`) after the built-in stylesheet, and `--css <file>` adds a stylesheet after that, so it wins. `.md` ignores the style file. The style file wins over a `--template` for the keys it names; the template keeps everything else. `page` settings are ignored with a `[warn]` when `--template` is given.
+
+Run: `python <skill-dir>/scripts/build_docx.py --title "..." --steps steps.json --style style.json --output tutorial.docx`.
+
 ## Auto-contrast keys
 
 `annotate.py` swaps a marker color that blends into the screenshot (see `annotation-spec.md`, "Auto-contrast"). `markers.auto_contrast` turns it off for the whole file, a per-type `auto_contrast` turns it off for one marker type, and `--no-auto-contrast` turns it off for one run. `markers.min_contrast` is the lowest contrast ratio (WCAG, 1 to 21) a color may have; raise it to be stricter. `markers.palette` lists the colors tried first, in order, before the built-in `#E53935`, `#1565C0`, `#FDD835`, `#000000`, `#FFFFFF`. Circle and label text always needs 3.0:1 on its own fill, whatever `min_contrast` says. Each swap prints a `[warn]`.
 
-## Which value wins
+## Which value wins (`markers`)
 
 For each field a marker leaves out, the first match wins:
 
@@ -49,5 +76,5 @@ For each field a marker leaves out, the first match wins:
 
 ## Problems
 
-- Missing file, invalid JSON, a top level that is not an object, or an invalid value (for example `"radius": "big"`): `[error]` naming the file and key, exit `2`, nothing written.
-- A key the file does not support (a typo such as `"colour"`): `[warn] style file <path>: unknown key markers.circle.colour`; the key is ignored and the image is still saved.
+- Missing file, invalid JSON, a top level that is not an object, or an invalid value (for example `"radius": "big"` or `"document": {"page": {"size": "legal"}}`): `[error]` naming the file and key, exit `2`, nothing written.
+- A key the file does not support (a typo such as `"colour"`): `[warn] style file <path>: unknown key markers.circle.colour` (or `document.title.colour`); the key is ignored and the image is still saved.

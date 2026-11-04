@@ -12,7 +12,7 @@ Usage:
         --title  "My App - Getting Started" \
         --steps  steps.json \
         --output tutorial.docx \
-        [--template company.docx]
+        [--template company.docx] [--style style.json] [--css extra.css]
 
 steps.json (UTF-8) is an array of steps:
 [
@@ -28,6 +28,11 @@ steps.json (UTF-8) is an array of steps:
 --template (.docx or .dotx, for .docx output) builds inside a Word template: its body is
 cleared, and its styles, page setup, headers, and footers carry over.
 
+--style reads the "document" section of a style file (see references/style-file.md): fonts,
+sizes, colors, and alignment for the Word styles Normal, Title, Heading 2, and Caption, and the
+page setup (not with --template). For .html it becomes CSS. --css (.html only) adds a stylesheet
+after that. For a template, the style file wins for the keys it names.
+
 A relative image path is looked up from the current directory first, then from
 the folder that holds steps.json.
 
@@ -36,18 +41,25 @@ replaced by a red "[Image not found: ...]" line and listed on stderr), or the
 output could not be written, 2 invalid arguments or steps (nothing written).
 """
 
+from __future__ import annotations
+
 import argparse
 import base64
 import html
 import json
 import os
+import re
 import shutil
 import sys
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from style_file import (StyleError, load_style, parse_color,  # noqa: E402
+                        validate_document)
 
 FIELDS = ("heading", "body", "image", "caption")
 MAX_WIDTH_IN, MAX_HEIGHT_IN, SCREEN_DPI = 6.0, 8.0, 96
@@ -63,6 +75,8 @@ class StepsError(ValueError):
 class BuildOptions:
     template: Path | None = None   # --template path
     document: Any = None           # the opened template (python-docx Document), set by main()
+    style: dict = field(default_factory=dict)  # the style file's "document" section
+    css: str | None = None         # contents of --css
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +153,7 @@ def open_template(path: Path):
     try:
         from docx import Document
         from docx.opc.exceptions import PackageNotFoundError
+        from lxml.etree import XMLSyntaxError
     except ImportError:
         sys.exit("python-docx is not installed. Run: pip install python-docx")
     if not path.is_file():
@@ -159,7 +174,8 @@ def open_template(path: Path):
                 zout.writestr(item, content)
         out.seek(0)
         return Document(out)
-    except (PackageNotFoundError, zipfile.BadZipFile, KeyError, ValueError):
+    except (PackageNotFoundError, zipfile.BadZipFile, KeyError, ValueError, XMLSyntaxError,
+            RuntimeError, NotImplementedError):  # the last two: an encrypted zip
         raise StepsError(f"--template is not a Word document (.docx or .dotx): {path}")
 
 
@@ -202,6 +218,63 @@ def paragraph_style(doc, name: str, warned: set) -> str:
     return name
 
 
+ALIGN_NAMES = {"left": "LEFT", "center": "CENTER", "right": "RIGHT"}
+STYLE_BLOCKS = (("title", "Title"), ("heading", "Heading 2"), ("caption", "Caption"))
+
+
+def apply_document_style(doc, style: dict, has_template: bool, warned: set | None = None) -> list:
+    """Apply a style file "document" section to the Normal, Title, Heading 2, and Caption styles.
+
+    Creates a missing style first. Page settings apply only without a template. Returns warnings.
+    """
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Inches, Mm, Pt, RGBColor
+    warned = set() if warned is None else warned
+    warnings = []
+
+    def set_font(st, font=None, size=None, color=None, bold=None, italic=None):
+        if font is not None:
+            st.font.name = font
+        if size is not None:
+            st.font.size = Pt(size)
+        if color is not None:
+            st.font.color.rgb = RGBColor(*parse_color(color))
+        if bold is not None:
+            st.font.bold = bold
+        if italic is not None:
+            st.font.italic = italic
+
+    set_font(doc.styles["Normal"], style.get("font"), style.get("font_size"), style.get("color"))
+    for key, name in STYLE_BLOCKS:
+        block = style.get(key)
+        if not block:
+            continue
+        st = doc.styles[paragraph_style(doc, name, warned)]
+        if key == "caption" and not has_template:
+            # The built-in caption look (italic gray 9 pt) stays for what the file does not name.
+            set_font(st, size=9, color="#666666", bold=False, italic=True)
+        set_font(st, block.get("font"), block.get("size"), block.get("color"),
+                 block.get("bold"), block.get("italic"))
+        if "align" in block:
+            st.paragraph_format.alignment = getattr(WD_ALIGN_PARAGRAPH, ALIGN_NAMES[block["align"]])
+
+    page = style.get("page")
+    if page:
+        if has_template:
+            warnings.append("style file page settings are ignored with --template")
+        else:
+            section = doc.sections[0]
+            if "size" in page:
+                width, height = ((Inches(8.5), Inches(11)) if page["size"] == "letter"
+                                 else (Mm(210), Mm(297)))
+                section.page_width, section.page_height = width, height
+            if "margins_in" in page:
+                m = Inches(page["margins_in"])
+                section.left_margin = section.right_margin = m
+                section.top_margin = section.bottom_margin = m
+    return warnings
+
+
 def build_docx(title: str, steps: list, output: Path, opts: BuildOptions) -> list:
     try:
         from docx import Document
@@ -221,9 +294,15 @@ def build_docx(title: str, steps: list, output: Path, opts: BuildOptions) -> lis
         doc = Document()
         doc.styles["Normal"].font.size = Pt(11)
 
+    for w in apply_document_style(doc, opts.style, templated, warned):
+        print(f"[warn] {w}", file=sys.stderr)
+    doc_style = opts.style or {}
+    caption_styled = bool(doc_style.get("caption"))
+
     # With a template, the styles decide the look: no direct alignment or run formatting.
+    # Without one, direct formatting stays only for what the style file does not name.
     title_para = doc.add_paragraph(title, style=paragraph_style(doc, "Title", warned))
-    if not templated:
+    if not templated and "align" not in (doc_style.get("title") or {}):
         title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
     doc.add_paragraph()  # spacer
 
@@ -256,7 +335,7 @@ def build_docx(title: str, steps: list, output: Path, opts: BuildOptions) -> lis
             doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         if step["caption"]:
-            if templated:
+            if templated or caption_styled:
                 doc.add_paragraph(step["caption"], style=paragraph_style(doc, "Caption", warned))
             else:
                 cap = doc.add_paragraph(step["caption"])
@@ -339,12 +418,59 @@ figcaption { font-size: .85rem; font-style: italic; color: #666; margin-top: .4r
 """.strip()
 
 
+CSS_BLOCKS = (("h1", "title"), ("h2", "heading"), ("figcaption", "caption"))
+
+
+def css_font(name: str) -> str:
+    if re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        return name
+    return '"' + name.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def css_hex(value) -> str:
+    return "#%02X%02X%02X" % parse_color(value)
+
+
+def style_css(style: dict) -> str:
+    """Turn the style file's "document" section into CSS rules (page settings do not apply)."""
+    def rule(selector, decls):
+        if not decls:
+            return ""
+        return f"{selector} {{\n" + "".join(f"  {d};\n" for d in decls) + "}"
+
+    def block_decls(block):
+        decls = []
+        if "font" in block:
+            decls.append(f"font-family: {css_font(block['font'])}")
+        if "size" in block:
+            decls.append(f"font-size: {block['size']:g}pt")
+        if "color" in block:
+            decls.append(f"color: {css_hex(block['color'])}")
+        if "bold" in block:
+            decls.append(f"font-weight: {'bold' if block['bold'] else 'normal'}")
+        if "italic" in block:
+            decls.append(f"font-style: {'italic' if block['italic'] else 'normal'}")
+        if "align" in block:
+            decls.append(f"text-align: {block['align']}")
+        return decls
+
+    body = {}
+    for src, dst in (("font", "font"), ("font_size", "size"), ("color", "color")):
+        if src in style:
+            body[dst] = style[src]
+    rules = [rule("body", block_decls(body))]
+    rules += [rule(sel, block_decls(style[key])) for sel, key in CSS_BLOCKS if style.get(key)]
+    return "\n".join(r for r in rules if r)
+
+
 def build_html(title: str, steps: list, output: Path, opts: BuildOptions) -> list:
     esc = html.escape
     problems = []
+    extra_css = (opts.css or "").replace("</style", "<\\/style")
+    page_css = "\n".join(c for c in (HTML_STYLE, style_css(opts.style), extra_css) if c.strip())
     parts = ["<!DOCTYPE html>", '<html lang="en">', "<head>", '<meta charset="utf-8">',
              '<meta name="viewport" content="width=device-width, initial-scale=1">',
-             f"<title>{esc(title)}</title>", f"<style>\n{HTML_STYLE}\n</style>", "</head>",
+             f"<title>{esc(title)}</title>", f"<style>\n{page_css}\n</style>", "</head>",
              "<body>", f"<h1>{esc(title)}</h1>"]
     for step in steps:
         parts.append(f"<section>\n<h2>{esc(step['heading'])}</h2>")
@@ -374,6 +500,17 @@ def build_html(title: str, steps: list, output: Path, opts: BuildOptions) -> lis
 BUILDERS = {".docx": build_docx, ".md": build_md, ".html": build_html, ".htm": build_html}
 
 
+def read_css(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except FileNotFoundError:
+        raise StepsError(f"--css file not found: {path}")
+    except UnicodeDecodeError as e:
+        raise StepsError(f"--css file is not valid UTF-8 text: {path} ({e})")
+    except OSError as e:
+        raise StepsError(f"--css file could not be read: {path} ({e.strerror or e})")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Build a tutorial (.docx, .md, or .html, from the --output extension) "
@@ -385,6 +522,11 @@ def main():
     parser.add_argument("--template", metavar="FILE",
                         help="A .docx or .dotx whose styles, page setup, headers, and footers the "
                              ".docx output uses; its body is cleared")
+    parser.add_argument("--style", metavar="FILE",
+                        help="Style file (JSON); only its \"document\" section is used: fonts, sizes, "
+                             "colors, alignment, and page setup")
+    parser.add_argument("--css", metavar="FILE",
+                        help="CSS file added after the built-in and style-file CSS (.html output only)")
     args = parser.parse_args()
 
     output = Path(args.output)
@@ -393,14 +535,27 @@ def main():
         print(f"[error] --output must end in {', '.join(BUILDERS)}; got {output.name}", file=sys.stderr)
         sys.exit(2)
     opts = BuildOptions(template=Path(args.template) if args.template else None)
+    ext = output.suffix.lower()
     try:
         steps = load_steps(Path(args.steps))
+        if args.style:
+            sections, style_warnings = load_style(args.style)
+            errors, more = validate_document(sections["document"], args.style)
+            for w in style_warnings + more:
+                print(f"[warn] {w}", file=sys.stderr)
+            if errors:
+                raise StepsError("\n".join(errors))
+            opts.style = sections["document"]
+        if args.css:
+            opts.css = read_css(Path(args.css))
+            if ext not in (".html", ".htm"):
+                print(f"[warn] --css applies to .html output; ignored for {ext}", file=sys.stderr)
         if opts.template and output.suffix.lower() == ".docx":
             opts.document = open_template(opts.template)
         elif opts.template:
             print(f"[warn] --template applies to .docx and .pdf output; ignored for "
                   f"{output.suffix.lower()}", file=sys.stderr)
-    except StepsError as e:
+    except (StepsError, StyleError) as e:
         for line in str(e).splitlines():
             print(f"[error] {line}", file=sys.stderr)
         print("[error] Nothing was written.", file=sys.stderr)

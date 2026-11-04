@@ -147,6 +147,8 @@ Options for `build_docx.py`:
 | Option | Description |
 |---|---|
 | `--template <file>` | A `.docx` or `.dotx` for `.docx` output. The body is cleared; styles, page setup, headers, and footers carry over. A style the template lacks (`Title`, `Heading 2`, `Caption`) is added with a basic look and a `[warn]`. Ignored with a warning for `.md` and `.html`. A missing or non-Word file exits `2`. |
+| `--style <file>` | A style file (JSON). Only its `document` section is read: fonts, sizes, colors, and alignment for the title, headings, captions, and body, plus `page` (not with `--template`). It sets the Word styles, becomes CSS for `.html`, and is ignored for `.md`. With a template, the style file wins for the keys it names. An invalid value exits `2`. See `references/style-file.md`. |
+| `--css <file>` | A CSS file added after the built-in and style-file CSS. `.html` output only; other formats print a `[warn]` and ignore it. A missing file exits `2`. |
 
 A relative `image` path is looked up from the current folder first, then from the folder that holds `steps.json`, so plain file names work when both are in `<shots>`.
 
