@@ -54,3 +54,4 @@ Keep implementation details out of the map. Name only user paths, stable handles
 - [Documented examples](./spec-examples.md) covers running every JSON and command example from `annotation-spec.md` and `SKILL.md` as written, from a project outside the repo.
 - [Tutorial pipeline](./tutorial-pipeline.md) covers screenshot, element coordinates, annotation, and `.docx`, end to end.
 - [Full page in a scroll box](./full-page-scroll-box.md) covers detecting a page that scrolls inside a box (app shell or `body`), growing the window to the content height, measuring and annotating the tall image, restoring the window size, and the `vdw page` test pages.
+- [Browser modes and saved sign-in](./browser-modes.md) covers the plugin's `--caps=storage` setting and version, the storage tools listed with and without the capability, a headless screenshot, and the git-ignored path rule for a saved sign-in file.

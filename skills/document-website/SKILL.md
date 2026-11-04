@@ -47,7 +47,9 @@ Always pass `filename` as an absolute path in `<shots>`, and pass `scale="css"`:
 - Without `filename`, the tool saves `page-<timestamp>.png` to its own output folder.
 - `scale="css"` (required by some releases) makes one image pixel equal one CSS pixel, so element positions from the page match image coordinates. Never use `scale="device"`.
 
-The MCP also writes page snapshots (`.yml`) to its output folder, `<project>/.playwright-mcp/` unless the MCP server was started with `--output-dir`. Add that folder, and `<shots>` if it is not already in an ignored temp folder, to the project's `.gitignore`.
+The MCP also writes page snapshots (`.yml`) to its output folder, `<project>/.playwright-mcp/` unless the server was started with `--output-dir`. Add that folder, and `<shots>` if it is not already in an ignored temp folder, to the project's `.gitignore`. To keep that folder out of the project, set `PLAYWRIGHT_MCP_OUTPUT_DIR` before the server starts (see `references/browser-modes.md`). Never move or delete `.playwright-mcp/` by hand while the server runs.
+
+**Sign-in.** If a page needs sign-in, follow `references/browser-modes.md`. In the headed browser, ask the user to sign in in the Playwright window and wait for them to say it is done; then offer to save the sign-in for later headless runs (it is a live session secret and goes only in a git-ignored temp folder). In headless mode with no saved sign-in, stop and explain the options. When the user says "use my Chrome," use a Playwright server registered with `--extension`, or give the one-line setup from the reference.
 
 **Viewport screenshot**
 ```
@@ -193,6 +195,7 @@ The scripts also check their own imports: `annotate.py` and a `.docx` build exit
 ## Reference Files
 - `references/annotation-spec.md` — marker types, fields, coordinate system, fonts, errors
 - `references/full-page.md` — full-page screenshots, including pages that scroll inside a box
+- `references/browser-modes.md` — headless, isolated, and own-Chrome modes, saved sign-in, keeping one Playwright server
 - `references/templates.md` — following a Word template or a Word or PDF reference document
 - `scripts/describe_docx.py` — prints the page setup, styles, and outline of a Word document
 - `scripts/annotate.py` — annotation CLI

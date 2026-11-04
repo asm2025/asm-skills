@@ -17,7 +17,7 @@ Agent skills. Each folder under `skills/` is self-contained: a `SKILL.md` the ag
 
 This installs every skill under `skills/` and registers the [Playwright MCP server](https://github.com/microsoft/playwright-mcp) (`npx @playwright/mcp@latest`, so Node.js must be installed). Run `/plugin marketplace update essential-skills` to get new versions.
 
-If Playwright MCP is already registered another way (for example, the official `playwright` plugin), you will end up with two copies of the server. Disable one of them in `/mcp`.
+If Playwright MCP is already registered another way (for example, the official `playwright` plugin), you will end up with two copies of the server. Keep this plugin's `playwright` server enabled and disable the other in `/mcp`: only this one turns on the storage tools that save and restore a sign-in. The skill still works on another Playwright server, minus saved sign-in. For headless, isolated, and own-Chrome modes and saved sign-in, see [browser modes](skills/document-website/references/browser-modes.md).
 
 ### Other agents
 
