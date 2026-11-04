@@ -10,7 +10,7 @@ StyleError with a message that names the file, never a raw traceback.
 """
 
 import json
-from pathlib import Path
+import math
 
 try:
     from PIL import ImageColor
@@ -54,7 +54,7 @@ def parse_color(value) -> tuple:
 
 
 def _num(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 def load_style(path):
@@ -72,12 +72,12 @@ def load_style(path):
             data = json.load(f)
     except FileNotFoundError:
         raise StyleError(f"--style file not found: {path}")
-    except IsADirectoryError:
-        raise StyleError(f"--style file not found: {path} (it is a folder)")
     except json.JSONDecodeError as e:
         raise StyleError(f"style file {path} is not valid JSON: {e}")
     except UnicodeDecodeError as e:
         raise StyleError(f"style file {path} is not valid UTF-8 text: {e}")
+    except OSError as e:
+        raise StyleError(f"--style file could not be read: {path}: {e}")
     if not isinstance(data, dict):
         raise StyleError(f"style file {path} must contain a JSON object, "
                          f"got {type(data).__name__}")
@@ -94,8 +94,8 @@ def _check_field(prefix: str, field: str, value, mtype: str, source: str) -> lis
     where = f"style file {source}: {prefix}.{field}"
     if field in COLOR_FIELDS:
         try:
-            ImageColor.getrgb(str(value))
-        except ValueError:
+            parse_color(value)
+        except StyleError:
             return [f"{where} must be {COLOR_HINT}, got {json.dumps(value)}"]
         return []
     if field == "auto_contrast":
@@ -141,8 +141,8 @@ def validate_markers(section, source: str):
             else:
                 for i, item in enumerate(value):
                     try:
-                        ImageColor.getrgb(str(item))
-                    except ValueError:
+                        parse_color(item)
+                    except StyleError:
                         errors.append(f"style file {source}: markers.palette[{i}] must be "
                                       f"{COLOR_HINT}, got {json.dumps(item)}")
         else:

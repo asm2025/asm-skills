@@ -476,13 +476,16 @@ def main():
             sys.exit(2)
         cli[opt] = value
 
+    style_warnings, style_errors = [], []
     try:
         sections, style_warnings = load_style(args.style)
         style_errors, more = validate_markers(sections["markers"], args.style)
         style_warnings += more
     except StyleError as e:
-        style_errors, style_warnings = [str(e)], []
+        style_errors = [str(e)]
     if style_errors:
+        for w in style_warnings:
+            print(f"[warn] {w}", file=sys.stderr)
         for line in style_errors:
             print(f"[error] {line}", file=sys.stderr)
         print("[error] Nothing was written.", file=sys.stderr)
