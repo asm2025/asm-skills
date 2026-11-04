@@ -8,6 +8,7 @@
   "homepage": "https://github.com/asm2025/essential-skills",
   "repository": "https://github.com/asm2025/essential-skills",
   "license": "MIT",
+  "icon": "./assets/icon/icon-512.png",
   "mcpServers": {
     "playwright": {
       "command": "npx",
