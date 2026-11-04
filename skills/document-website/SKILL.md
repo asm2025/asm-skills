@@ -56,13 +56,7 @@ browser_take_screenshot  scale="css"  filename="<shots>/<step_name>.png"
 ```
 
 **Full-page screenshot**
-A full-page capture drops the page's scrollbar, which shifts centered content sideways. Hide the scrollbar first and measure (step 3) in that same state, then capture:
-```
-browser_evaluate         function="() => { document.documentElement.style.overflow = 'hidden'; scrollTo(0, 0); }"
-browser_take_screenshot  scale="css"  fullPage=true  filename="<shots>/<step_name>_full.png"
-browser_evaluate         function="() => { document.documentElement.style.overflow = ''; }"
-```
-Run the last line before interacting with the page again.
+Many web apps scroll inside a box (a main area next to a sidebar), where `fullPage=true` returns only the viewport. Follow `references/full-page.md`: run its detection function, then use the document recipe or the tall-window recipe it picks.
 
 **Element screenshot**
 To capture only one section, take an accessibility snapshot first, then screenshot that element by its reference. Current releases call the reference parameter `target` (older ones call it `ref`); pass `element`, a human-readable description of the element, alongside it.
@@ -85,7 +79,8 @@ Convert a box `x, y, w, h` to image pixels for the screenshot you took:
 | Screenshot | Image x, y |
 |---|---|
 | Viewport | `x, y` |
-| Full page | `x + scrollX, y + scrollY`, measured with the scrollbar hidden as in step 2 (after `scrollTo(0, 0)` the offset is 0) |
+| Full page, document scrolls | `x + scrollX, y + scrollY`, measured with the scrollbar hidden as in step 2 (after `scrollTo(0, 0)` the offset is 0) |
+| Full page, tall window | `x, y`, measured after the window is resized (`references/full-page.md`) |
 | Element | `x - ex, y - ey`, where `ex, ey` is the screenshotted element's box |
 
 Then point markers at the box: an arrow `to` the box's left-middle `[x, y + h/2]` or center, a `box` with `rect` `[x - 4, y - 4, w + 8, h + 8]`, a `circle` just outside a corner.
@@ -197,6 +192,7 @@ The scripts also check their own imports: `annotate.py` and a `.docx` build exit
 
 ## Reference Files
 - `references/annotation-spec.md` — marker types, fields, coordinate system, fonts, errors
+- `references/full-page.md` — full-page screenshots, including pages that scroll inside a box
 - `references/templates.md` — following a Word template or a Word or PDF reference document
 - `scripts/describe_docx.py` — prints the page setup, styles, and outline of a Word document
 - `scripts/annotate.py` — annotation CLI

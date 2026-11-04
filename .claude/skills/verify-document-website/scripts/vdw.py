@@ -9,6 +9,7 @@ Python that `setup` prints as PY=..., because they need Pillow and python-docx.
     "$PY"   vdw.py doctor  --run "$RUN"
     "$PY"   vdw.py fixture --out "$RUN/work/page.png"
     "$PY"   vdw.py run     --run "$RUN" --name annotate-all -- "$PY" skills/document-website/scripts/annotate.py ...
+    "$PY"   vdw.py page    --kind appshell|bodyscroll   # prints a browser_evaluate function
     "$PY"   vdw.py probe   --image out.png --at 320,150 --at 10,10
     "$PY"   vdw.py find    --image out.png --color 255,255,255 --region 300,130,340,170
     "$PY"   vdw.py diff    --before in.png --after out.png
@@ -208,6 +209,41 @@ def cmd_run(a):
 
 
 # --------------------------------------------------------------------------- probe / diff
+
+PAGE_JS = {
+    "appshell": """() => {
+  document.documentElement.innerHTML = '<head><style>' +
+    'html, body { height: 100%; overflow: hidden; margin: 0; font-family: sans-serif }' +
+    '#header { height: 56px; background: rgb(33,47,61) }' +
+    '#shell { display: flex; height: calc(100% - 56px) }' +
+    '#sidebar { width: 240px; background: rgb(45,45,45); overflow-y: auto }' +
+    '#sidebar > div { height: 1000px }' +
+    '#right { flex: 1; display: flex; flex-direction: column; min-width: 0 }' +
+    '#crumb { height: 40px; background: rgb(220,224,230); flex: none }' +
+    '#content { flex: 1; overflow-y: auto; min-height: 0 }' +
+    '#col { height: 2000px; display: flex; flex-direction: column; justify-content: space-between }' +
+    '#last { width: 200px; height: 40px; background: rgb(0,160,0); flex: none }' +
+    '</style></head><body><div id="header"></div><div id="shell">' +
+    '<div id="sidebar"><div></div></div><div id="right"><div id="crumb"></div>' +
+    '<main id="content"><div id="col"><p>Top of the content box</p><div id="last"></div></div></main>' +
+    '</div></div></body>';
+  return [innerWidth, innerHeight];
+}""",
+    "bodyscroll": """() => {
+  document.documentElement.innerHTML = '<head><style>' +
+    'html { height: 100%; overflow: hidden }' +
+    'body { height: 100%; overflow-y: auto; margin: 0; font-family: sans-serif }' +
+    '#col { height: 2000px; display: flex; flex-direction: column; justify-content: space-between }' +
+    '#last { width: 200px; height: 40px; background: rgb(0,160,0); flex: none }' +
+    '</style></head><body><div id="col"><p>Top of the page</p><div id="last"></div></div></body>';
+  return [innerWidth, innerHeight];
+}""",
+}
+
+
+def cmd_page(a):
+    print(PAGE_JS[a.kind])
+
 
 def cmd_probe(a):
     from PIL import Image
@@ -429,6 +465,11 @@ def main():
     p.add_argument("--lock", help="Windows only: hold this file open with no sharing while the command runs")
     p.add_argument("cmd", nargs=argparse.REMAINDER)
     p.set_defaults(fn=cmd_run)
+
+    p = sp.add_parser("page", help="print a browser_evaluate function that builds a page that scrolls inside a box")
+    p.add_argument("--kind", choices=["appshell", "bodyscroll"], required=True,
+                   help="appshell: header, sidebar, and a main box that scrolls; bodyscroll: body is the scroll box")
+    p.set_defaults(fn=cmd_page)
 
     p = sp.add_parser("probe", help="print RGB at points")
     p.add_argument("--image", required=True)

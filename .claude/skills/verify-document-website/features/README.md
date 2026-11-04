@@ -53,3 +53,4 @@ Keep implementation details out of the map. Name only user paths, stable handles
 - [Screenshots folder](./screenshot-dir.md) covers how the screenshots folder is picked: `--dir`, the environment variable, project temp folders, the default, `--sub`, `--project`, and the outside-the-project warning.
 - [Documented examples](./spec-examples.md) covers running every JSON and command example from `annotation-spec.md` and `SKILL.md` as written, from a project outside the repo.
 - [Tutorial pipeline](./tutorial-pipeline.md) covers screenshot, element coordinates, annotation, and `.docx`, end to end.
+- [Full page in a scroll box](./full-page-scroll-box.md) covers detecting a page that scrolls inside a box (app shell or `body`), growing the window to the content height, measuring and annotating the tall image, restoring the window size, and the `vdw page` test pages.
