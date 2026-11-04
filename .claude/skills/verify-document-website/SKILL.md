@@ -10,6 +10,8 @@ The thing under test is `skills/document-website/`: two Python CLIs that an agen
 - `scripts/annotate.py` draws markers (`arrow`, `circle`, `box`, `label`) onto a PNG.
 - `scripts/build_docx.py` turns a `steps.json` array into a tutorial: `.docx`, `.md`, or `.html`, by the `--output` extension.
 - `scripts/screenshot_dir.py` picks and creates the folder the screenshots go in.
+- `scripts/describe_docx.py` prints the page setup, styles, and outline of a Word reference document.
+- `--style` (a style file) and `--template`, `--css`, `--pdf-engine` on the scripts add styling, templates, and `.pdf` output.
 
 The "user" is an agent that copies commands and JSON from `skills/document-website/SKILL.md` and `references/annotation-spec.md`. Verify by running those commands, not by importing functions. The Playwright screenshot and coordinate steps are agent actions, not scripts. Only `features/tutorial-pipeline.md` touches them.
 
@@ -66,6 +68,7 @@ Observing output:
 - `"$PY" "$VDW" probe --image <png> --at x,y [--at x,y ...]` prints exact RGB at points. Use probes as assertions.
 - `"$PY" "$VDW" find --image <png> --color r,g,b [--tolerance n] [--region x0,y0,x1,y1]` prints the count, bounding box, and center of pixels matching a color. Use it to check where text or a marker landed.
 - `"$PY" "$VDW" diff --before <in> --after <out> [--region x0,y0,x1,y1]` prints the count and bounding box of changed pixels, and fails on a size mismatch.
+- `"$PY" "$VDW" pdf-info --pdf <file>` prints a PDF's page count, image count, and first-page text (PDF output proof).
 - `"$PY" "$VDW" docx-dump --docx <file> --out "$RUN/evidence/<name>.dump.txt"` lists every paragraph with its style, alignment, image width, first-run formatting, and text.
 - Look at each output PNG yourself (read the image). Probes prove that the pixels are there, and looking catches wrong placement or clipped text.
 
@@ -101,6 +104,6 @@ Proof standards:
 
 ## Helpers
 
-`vdw.py` is the only helper. `"$PY" "$VDW" --help` and `"$PY" "$VDW" <subcommand> --help` show every flag. Its subcommands are `setup`, `doctor`, `fixture`, `page`, `run`, `probe`, `find`, `diff`, `docx-dump`, `template`, and `cleanup`. Use `--root DIR` (before the subcommand) to put the venv and runs somewhere other than the system temp dir.
+`vdw.py` is the only helper. `"$PY" "$VDW" --help` and `"$PY" "$VDW" <subcommand> --help` show every flag. Its subcommands are `setup`, `doctor`, `fixture`, `page`, `run`, `probe`, `find`, `diff`, `docx-dump`, `pdf-info`, `template`, and `cleanup`. `page --kind appshell|bodyscroll` prints a `browser_evaluate` function that builds a page scrolling inside a box (for `features/full-page-scroll-box.md`); `pdf-info` prints a PDF's page count, image count, and first-page text; `template` writes a Word template with a known header, footer, margins, and styles. Use `--root DIR` (before the subcommand) to put the venv and runs somewhere other than the system temp dir.
 
 Keep this skill in sync with the scripts. When `DRAWERS` in `annotate.py`, `references/annotation-spec.md`, or the `steps.json` format changes, update the matching feature file in the same change.

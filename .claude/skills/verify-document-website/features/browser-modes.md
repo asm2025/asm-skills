@@ -6,6 +6,7 @@ The plugin registers a `playwright` MCP server with the storage tools turned on,
 
 - `modes-caps` lists the MCP tools with and without the storage capability.
 - `modes-headless` starts the server headless and takes a screenshot with no window.
+- `modes-caps-replaced` shows `--caps=storage` replacing a `PLAYWRIGHT_MCP_CAPS` value, and `--caps=storage,vision` keeping both.
 - `modes-plugin-json` checks the plugin's storage setting and version.
 - `modes-auth-path` proves the documented sign-in path is git-ignored and the old `<shots>/../auth` path was not.
 
@@ -76,7 +77,8 @@ PYEOF
 - **Caps off.** Run `"$PY" "$VDW" run --run "$RUN" --name modes-caps-off -- "$PY" "$RUN/work/mcp_probe.py"` with `PLAYWRIGHT_MCP_CAPS` unset in the calling shell. Neither storage tool is listed.
 - **Headless.** Run `"$PY" "$VDW" run --run "$RUN" --name modes-headless -- env PLAYWRIGHT_MCP_HEADLESS=true MCP_KEEP=1 "$PY" "$RUN/work/mcp_probe.py" --shot`. Stdout has `navigate isError: False` and `screenshot isError: False image: True`, and `HEADLESS_FLAG: True` shows that the Chromium command line (found by its `ms-playwright` profile folder) contains `--headless`. No browser window appears.
 - **Plugin file.** Run `"$PY" "$VDW" run --run "$RUN" --name modes-plugin-json -- "$PY" -c "import json; d=json.load(open('.claude-plugin/plugin.json',encoding='utf-8')); a=d['mcpServers']['playwright']['args']; assert '--caps=storage' in a, a; assert d['version']=='1.1.0', d['version']; print('ok', a, d['version'])"`. Exit `0`. Then, if `claude plugin validate --help` works, `"$PY" "$VDW" run --run "$RUN" --name modes-plugin-validate -- claude plugin validate .` passes; otherwise report it skipped, naming that the CLI lacks the command.
-- **Sign-in path.** Build a throwaway repo: `mkdir -p "$RUN/work/authrepo/tmp/auth" && ( cd "$RUN/work/authrepo" && git init -q && printf 'tmp/\n' > .gitignore )`. Then record each check with `vdw run`, using `-- git -C "$RUN/work/authrepo" check-ignore -q tmp/auth/example.com.json`: exit `0` (name `modes-auth-ignored`). `... check-ignore -q auth/example.com.json` (where `<shots>/../auth` lands with no temp folder): exit `1` (name `modes-auth-not-ignored`).
+- **Sign-in path.** Build a throwaway repo: `mkdir -p "$RUN/work/authrepo/tmp/auth" && ( cd "$RUN/work/authrepo" && git init -q && printf 'tmp/\n\!tmp/\n' > .gitignore && mkdir -p '!tmp/auth' )`. Then record each check with `vdw run`, using `-- git -C "$RUN/work/authrepo" check-ignore -q tmp/auth/example.com.json`: exit `0` (name `modes-auth-ignored`). `... check-ignore -q auth/example.com.json` (where `<shots>/../auth` lands with no temp folder): exit `1` (name `modes-auth-not-ignored`). Quote a `!tmp` path (history expansion eats it unquoted): `... check-ignore -q '!tmp/auth/example.com.json'` exits `0` (name `modes-auth-bang-ignored`), the form `references/browser-modes.md` shows.
+- **Caps replaced.** Run `"$PY" "$VDW" run --run "$RUN" --name modes-caps-replaced -- env PLAYWRIGHT_MCP_CAPS=vision "$PY" "$RUN/work/mcp_probe.py" --caps=storage`. Both storage tools are listed and the vision tools (`browser_mouse_click_xy` and its siblings) are not: the flag replaces the variable. Then `"$PY" "$RUN/work/mcp_probe.py" --caps=storage,vision` under `--name modes-caps-both` lists the storage tools and the vision tools together, which is the registration `references/browser-modes.md` shows for extra capabilities.
 - **Proof.** `$RUN/evidence/modes-*.txt` hold the records.
 
 ## Gotchas

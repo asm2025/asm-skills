@@ -20,7 +20,7 @@
 Preconditions:
 
 - Baseline state from `README.md`.
-- `$RUN/evidence/markers-defaults.png` exists. If not, run the **Defaults** bullet of `annotate-markers.md` first.
+- `$RUN/evidence/markers-defaults.png` exists. If not, make it now with the exact command from the **Defaults** bullet of `annotate-markers.md`: `"$PY" "$VDW" run --run "$RUN" --name markers-defaults -- "$PY" skills/document-website/scripts/annotate.py --input "$RUN/work/page.png" --output "$RUN/evidence/markers-defaults.png" --no-auto-contrast --markers '[{"type":"arrow","to":[640,200]},{"type":"circle","at":[320,150],"label":"1"},{"type":"box","rect":[100,400,300,60]},{"type":"label","at":[100,380],"text":"Click here"}]'` (it needs the baseline `page.png`).
 - `$RUN/evidence/tmpl-err/` does not exist yet.
 - `template-none` reuses the `build-docx` recipe's **Project images**, **Write steps**, **Build**, and **Dump** bullets.
 - Several bullets expect a non-zero exit. Do not use `set -e`.
