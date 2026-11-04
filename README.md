@@ -6,6 +6,17 @@ Agent skills. Each folder under `skills/` is self-contained: a `SKILL.md` the ag
 |---|---|
 | [`document-website`](skills/document-website/SKILL.md) | Screenshots a website with the Playwright MCP, annotates the screenshots (arrows, numbered badges, highlight boxes, labels), and builds a step-by-step tutorial as Word, Markdown, or self-contained HTML, and as PDF when you ask for one. A style file styles the markers and the document; see the [style file example](skills/document-website/references/style-file.md). |
 
+## What `document-website` can do
+
+- **Capture pages, including ones that scroll inside a box.** It screenshots through the Playwright MCP. When the page's content scrolls inside a panel instead of the window (app shells, a scrolling `body`), it detects that box and grows the window so the whole content lands in one screenshot. See [full page](skills/document-website/references/full-page.md).
+- **Annotate screenshots.** Arrows, numbered circles, highlight boxes, and text labels, with right-to-left text support. The marker schema is in the [annotation spec](skills/document-website/references/annotation-spec.md).
+- **Color markers from options or a style file.** Colors come from the marker itself, then `--color`/`--bg`/`--fg`, then a JSON style file (`--style`), then the built-in defaults.
+- **Keep markers readable automatically.** Auto-contrast samples the pixels around each marker and swaps a color that would blend into the screenshot (and the text inside circles and labels), with a `[warn]` line for every change. Turn it off with `--no-auto-contrast`, per marker, or in the style file.
+- **Build the tutorial as Word, Markdown, HTML, or PDF.** The `--output` extension picks the format. PDF is only made when you ask for it, through Word (Windows), LibreOffice, or Chrome/Edge, whichever is installed (`--pdf-engine` forces one).
+- **Follow your template or a reference document.** Build inside a Word `.docx` or `.dotx` template (`--template`) and keep its styles, page setup, headers, and footers. Or have the agent copy the look and structure of a Word or PDF reference document; `describe_docx.py` prints a Word file's fonts, colors, page setup, and outline. See [templates and reference documents](skills/document-website/references/templates.md).
+- **Style the document from the same style file.** Fonts, sizes, colors, alignment, and page size and margins for Word and PDF output, plus CSS for HTML (`--css`). The style file wins over a template for the keys it names. See the [style file example](skills/document-website/references/style-file.md).
+- **Use any Playwright browser mode and keep a sign-in.** Headed, headless, isolated, or your own Chrome (through a second server). A saved sign-in goes only in a git-ignored temp folder and is a live session secret, never to be committed. See [browser modes](skills/document-website/references/browser-modes.md).
+
 ## Install
 
 ### Claude Code (plugin)
