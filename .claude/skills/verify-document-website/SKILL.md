@@ -101,6 +101,6 @@ Proof standards:
 
 ## Helpers
 
-`vdw.py` is the only helper. `"$PY" "$VDW" --help` and `"$PY" "$VDW" <subcommand> --help` show every flag. Its subcommands are `setup`, `doctor`, `fixture`, `run`, `probe`, `find`, `diff`, `docx-dump`, and `cleanup`. Use `--root DIR` (before the subcommand) to put the venv and runs somewhere other than the system temp dir.
+`vdw.py` is the only helper. `"$PY" "$VDW" --help` and `"$PY" "$VDW" <subcommand> --help` show every flag. Its subcommands are `setup`, `doctor`, `fixture`, `run`, `probe`, `find`, `diff`, `docx-dump`, `template`, and `cleanup`. Use `--root DIR` (before the subcommand) to put the venv and runs somewhere other than the system temp dir.
 
 Keep this skill in sync with the scripts. When `DRAWERS` in `annotate.py`, `references/annotation-spec.md`, or the `steps.json` format changes, update the matching feature file in the same change.

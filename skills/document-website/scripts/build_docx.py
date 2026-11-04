@@ -11,7 +11,8 @@ Usage:
     python3 build_docx.py \
         --title  "My App - Getting Started" \
         --steps  steps.json \
-        --output tutorial.docx
+        --output tutorial.docx \
+        [--template company.docx]
 
 steps.json (UTF-8) is an array of steps:
 [
@@ -23,6 +24,9 @@ steps.json (UTF-8) is an array of steps:
   },
   ...
 ]
+
+--template (.docx or .dotx, for .docx output) builds inside a Word template: its body is
+cleared, and its styles, page setup, headers, and footers carry over.
 
 A relative image path is looked up from the current directory first, then from
 the folder that holds steps.json.
@@ -39,7 +43,11 @@ import json
 import os
 import shutil
 import sys
+import zipfile
+from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 FIELDS = ("heading", "body", "image", "caption")
 MAX_WIDTH_IN, MAX_HEIGHT_IN, SCREEN_DPI = 6.0, 8.0, 96
@@ -49,6 +57,12 @@ MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 
 class StepsError(ValueError):
     pass
+
+
+@dataclass
+class BuildOptions:
+    template: Path | None = None   # --template path
+    document: Any = None           # the opened template (python-docx Document), set by main()
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +130,79 @@ def paragraphs(body: str) -> list:
 # Word
 # ---------------------------------------------------------------------------
 
-def build_docx(title: str, steps: list, output: Path) -> list:
+DOCX_MAIN = "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"
+DOTX_MAIN = "application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml"
+
+
+def open_template(path: Path):
+    """Open a .docx or .dotx as a python-docx Document. Raises StepsError for anything else."""
+    try:
+        from docx import Document
+        from docx.opc.exceptions import PackageNotFoundError
+    except ImportError:
+        sys.exit("python-docx is not installed. Run: pip install python-docx")
+    if not path.is_file():
+        raise StepsError(f"--template file not found: {path}")
+    try:
+        data = path.read_bytes()
+    except OSError as e:
+        raise StepsError(f"--template cannot be read: {path} ({e.strerror or e})")
+    try:
+        # python-docx refuses a .dotx because its main part has the template content type,
+        # so rewrite that one entry in memory and open the result.
+        out = BytesIO()
+        with zipfile.ZipFile(BytesIO(data)) as zin, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                content = zin.read(item.filename)
+                if item.filename == "[Content_Types].xml":
+                    content = content.replace(DOTX_MAIN.encode("utf-8"), DOCX_MAIN.encode("utf-8"))
+                zout.writestr(item, content)
+        out.seek(0)
+        return Document(out)
+    except (PackageNotFoundError, zipfile.BadZipFile, KeyError, ValueError):
+        raise StepsError(f"--template is not a Word document (.docx or .dotx): {path}")
+
+
+def clear_body(doc) -> None:
+    """Remove every body child except the last w:sectPr (page setup, headers, footers)."""
+    body = doc.element.body
+    children = list(body)
+    keep = children[-1] if children and children[-1].tag.endswith("}sectPr") else None
+    for child in children:
+        if child is not keep:
+            body.remove(child)
+
+
+def paragraph_style(doc, name: str, warned: set) -> str:
+    """Return name, first adding a basic version of the style if the document lacks it."""
+    from docx.enum.style import WD_STYLE_TYPE
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Pt, RGBColor
+    try:
+        doc.styles[name]
+        return name
+    except KeyError:
+        pass
+    style = doc.styles.add_style(name, WD_STYLE_TYPE.PARAGRAPH)
+    style.base_style = doc.styles["Normal"]
+    if name == "Title":
+        style.font.bold, style.font.size = True, Pt(20)
+    elif name == "Heading 2":
+        style.font.bold, style.font.size = True, Pt(14)
+        outline = OxmlElement("w:outlineLvl")  # level 2 heading, so the navigation pane lists it
+        outline.set(qn("w:val"), "1")
+        style.element.get_or_add_pPr().append(outline)
+    elif name == "Caption":
+        style.font.italic, style.font.size = True, Pt(9)
+        style.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+    if name not in warned:
+        warned.add(name)
+        print(f"[warn] template has no '{name}' style; added a basic one", file=sys.stderr)
+    return name
+
+
+def build_docx(title: str, steps: list, output: Path, opts: BuildOptions) -> list:
     try:
         from docx import Document
         from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -126,12 +212,19 @@ def build_docx(title: str, steps: list, output: Path) -> list:
     except ImportError:
         sys.exit("python-docx is not installed. Run: pip install python-docx")
 
-    problems = []
-    doc = Document()
-    doc.styles["Normal"].font.size = Pt(11)
+    problems, warned = [], set()
+    templated = opts.document is not None
+    if templated:
+        doc = opts.document
+        clear_body(doc)
+    else:
+        doc = Document()
+        doc.styles["Normal"].font.size = Pt(11)
 
-    title_para = doc.add_heading(title, level=0)
-    title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    # With a template, the styles decide the look: no direct alignment or run formatting.
+    title_para = doc.add_paragraph(title, style=paragraph_style(doc, "Title", warned))
+    if not templated:
+        title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
     doc.add_paragraph()  # spacer
 
     def placeholder(text):
@@ -139,7 +232,7 @@ def build_docx(title: str, steps: list, output: Path) -> list:
         warn.runs[0].font.color.rgb = RGBColor(0xCC, 0x00, 0x00)
 
     for step in steps:
-        doc.add_heading(step["heading"], level=2)
+        doc.add_paragraph(step["heading"], style=paragraph_style(doc, "Heading 2", warned))
         for para in paragraphs(step["body"]):
             doc.add_paragraph(para)
 
@@ -163,11 +256,14 @@ def build_docx(title: str, steps: list, output: Path) -> list:
             doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         if step["caption"]:
-            cap = doc.add_paragraph(step["caption"])
-            cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            cap.runs[0].font.italic = True
-            cap.runs[0].font.size = Pt(9)
-            cap.runs[0].font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+            if templated:
+                doc.add_paragraph(step["caption"], style=paragraph_style(doc, "Caption", warned))
+            else:
+                cap = doc.add_paragraph(step["caption"])
+                cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cap.runs[0].font.italic = True
+                cap.runs[0].font.size = Pt(9)
+                cap.runs[0].font.color.rgb = RGBColor(0x66, 0x66, 0x66)
 
         doc.add_paragraph()  # spacer between steps
 
@@ -193,7 +289,7 @@ def md_text(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def build_md(title: str, steps: list, output: Path) -> list:
+def build_md(title: str, steps: list, output: Path, opts: BuildOptions) -> list:
     """Write Markdown and copy every image into <name>_images/ beside it.
 
     Copying keeps the tutorial working when the screenshots live in a temporary
@@ -243,7 +339,7 @@ figcaption { font-size: .85rem; font-style: italic; color: #666; margin-top: .4r
 """.strip()
 
 
-def build_html(title: str, steps: list, output: Path) -> list:
+def build_html(title: str, steps: list, output: Path, opts: BuildOptions) -> list:
     esc = html.escape
     problems = []
     parts = ["<!DOCTYPE html>", '<html lang="en">', "<head>", '<meta charset="utf-8">',
@@ -286,6 +382,9 @@ def main():
     parser.add_argument("--steps",  required=True, help="Path to the UTF-8 steps JSON file")
     parser.add_argument("--output", required=True,
                         help="Output path ending in .docx, .md, or .html; parent folders are created")
+    parser.add_argument("--template", metavar="FILE",
+                        help="A .docx or .dotx whose styles, page setup, headers, and footers the "
+                             ".docx output uses; its body is cleared")
     args = parser.parse_args()
 
     output = Path(args.output)
@@ -293,8 +392,14 @@ def main():
     if builder is None:
         print(f"[error] --output must end in {', '.join(BUILDERS)}; got {output.name}", file=sys.stderr)
         sys.exit(2)
+    opts = BuildOptions(template=Path(args.template) if args.template else None)
     try:
         steps = load_steps(Path(args.steps))
+        if opts.template and output.suffix.lower() == ".docx":
+            opts.document = open_template(opts.template)
+        elif opts.template:
+            print(f"[warn] --template applies to .docx and .pdf output; ignored for "
+                  f"{output.suffix.lower()}", file=sys.stderr)
     except StepsError as e:
         for line in str(e).splitlines():
             print(f"[error] {line}", file=sys.stderr)
@@ -303,7 +408,7 @@ def main():
 
     try:
         output.parent.mkdir(parents=True, exist_ok=True)
-        problems = builder(args.title, steps, output)
+        problems = builder(args.title, steps, output, opts)
     except PermissionError:
         print(f"[error] cannot write {output}: permission denied. If it is open in Word "
               "or another program, close it and run again.", file=sys.stderr)

@@ -13,6 +13,7 @@ Python that `setup` prints as PY=..., because they need Pillow and python-docx.
     "$PY"   vdw.py find    --image out.png --color 255,255,255 --region 300,130,340,170
     "$PY"   vdw.py diff    --before in.png --after out.png
     "$PY"   vdw.py docx-dump --docx out.docx --out "$RUN/evidence/doc.txt"
+    "$PY"   vdw.py template --out "$RUN/work/acme.docx" [--dotx] [--no-heading2]
     "$PY"   vdw.py cleanup --run "$RUN" [--venv]
 """
 
@@ -282,11 +283,77 @@ def cmd_docx_dump(a):
     lines.append(f"inline images: {len(doc.inline_shapes)}")
     normal = doc.styles["Normal"].font.size
     lines.append(f"Normal style font size: {normal.pt if normal else None}")
+    sec = doc.sections[0]
+    lines.append(f"section: page {sec.page_width.inches:.2f}x{sec.page_height.inches:.2f}in margins "
+                 f"{sec.left_margin.inches:.2f}/{sec.right_margin.inches:.2f}/"
+                 f"{sec.top_margin.inches:.2f}/{sec.bottom_margin.inches:.2f}in")
+    lines.append("header: " + repr(" | ".join(p.text for p in sec.header.paragraphs if p.text)))
+    lines.append("footer: " + repr(" | ".join(p.text for p in sec.footer.paragraphs if p.text)))
+    lines.append(f"tables: {len(doc.tables)}")
+    for name in ("Normal", "Title", "Heading 2", "Caption"):
+        try:
+            st = doc.styles[name]
+        except KeyError:
+            lines.append(f"style {name}: missing")
+            continue
+        size = st.font.size.pt if st.font.size else None
+        color = st.font.color.rgb if st.font.color and st.font.color.type else None
+        align = st.paragraph_format.alignment
+        lines.append(f"style {name}: font={st.font.name} size={size} color={color} "
+                     f"bold={st.font.bold} italic={st.font.italic} "
+                     f"align={align if align is not None else '-'}")
     out = "\n".join(lines)
     print(out)
     if a.out:
         Path(a.out).write_text(out + "\n", encoding="utf-8")
         print(f"(saved {posix(Path(a.out))})")
+
+
+# --------------------------------------------------------------------------- template
+
+DOCX_MAIN = "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"
+DOTX_MAIN = "application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml"
+
+
+def cmd_template(a):
+    import zipfile
+    from docx import Document
+    from docx.shared import Inches, Pt, RGBColor
+    doc = Document()
+    sec = doc.sections[0]
+    sec.page_width, sec.page_height = Inches(8.5), Inches(11)
+    sec.left_margin = sec.right_margin = sec.top_margin = sec.bottom_margin = Inches(0.5)
+    sec.header.paragraphs[0].text = "ACME Header"
+    sec.footer.paragraphs[0].text = "ACME Footer"
+    doc.add_paragraph("TEMPLATE BODY TEXT")
+    doc.add_table(rows=2, cols=2)
+    h2 = doc.styles["Heading 2"]
+    h2.font.name = "Georgia"
+    h2.font.color.rgb = RGBColor.from_string("0B3D91")
+    doc.styles["Title"].font.color.rgb = RGBColor.from_string("8B0000")
+    cap = doc.styles["Caption"]
+    cap.font.italic = True
+    cap.font.size = Pt(8)
+    cap.font.color.rgb = RGBColor.from_string("008000")
+    if a.no_heading2:
+        el = doc.styles["Heading 2"].element
+        el.getparent().remove(el)
+    out = Path(a.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(str(out))
+    if a.dotx:
+        src = out.read_bytes()
+        tmp = out.with_name(out.name + ".tmp")
+        with zipfile.ZipFile(out) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if item.filename == "[Content_Types].xml":
+                    data = data.replace(DOCX_MAIN.encode(), DOTX_MAIN.encode())
+                zout.writestr(item, data)
+        tmp.replace(out)
+        assert out.read_bytes() != src
+    print(f"template {posix(out)}: Letter, margins 0.5 in, header/footer ACME, 2x2 table, "
+          f"{'.dotx content type, ' if a.dotx else ''}{'no Heading 2 style' if a.no_heading2 else 'Heading 2 Georgia 0B3D91'}")
 
 
 # --------------------------------------------------------------------------- cleanup
@@ -364,6 +431,12 @@ def main():
     p.add_argument("--docx", required=True)
     p.add_argument("--out")
     p.set_defaults(fn=cmd_docx_dump)
+
+    p = sp.add_parser("template", help="write a Word template with a known header, footer, margins, and styles")
+    p.add_argument("--out", required=True)
+    p.add_argument("--dotx", action="store_true", help="use the .dotx (template) content type")
+    p.add_argument("--no-heading2", action="store_true", help="delete the Heading 2 style")
+    p.set_defaults(fn=cmd_template)
 
     p = sp.add_parser("cleanup", help="delete the run's work/ (keeps evidence/)")
     p.add_argument("--run", required=True)

@@ -142,6 +142,12 @@ python3 <skill-dir>/scripts/build_docx.py \
 | `image` | — | Screenshot path, or a list of paths for several screenshots in one step |
 | `caption` | — | Small italic line under the image(s) |
 
+Options for `build_docx.py`:
+
+| Option | Description |
+|---|---|
+| `--template <file>` | A `.docx` or `.dotx` for `.docx` output. The body is cleared; styles, page setup, headers, and footers carry over. A style the template lacks (`Title`, `Heading 2`, `Caption`) is added with a basic look and a `[warn]`. Ignored with a warning for `.md` and `.html`. A missing or non-Word file exits `2`. |
+
 A relative `image` path is looked up from the current folder first, then from the folder that holds `steps.json`, so plain file names work when both are in `<shots>`.
 
 - **Word:** images keep their on-screen size, shrunk to fit 6 x 8 inches; small element screenshots are not enlarged. PNG and JPEG work; WebP does not.
