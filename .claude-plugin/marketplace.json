@@ -1,5 +1,6 @@
 {
   "name": "essential-skills",
+  "description": "Agent skills by asm2025, starting with document-website: annotated screenshot tutorials.",
   "owner": {
     "name": "asm2025"
   },
@@ -7,7 +8,7 @@
     {
       "name": "essential-skills",
       "source": "./",
-      "description": "document-website: annotated screenshot tutorials as Word, Markdown, or HTML. Includes the Playwright MCP server."
+      "description": "document-website: annotated screenshot tutorials as Word, Markdown, HTML, or PDF on request. Includes the Playwright MCP server."
     }
   ]
 }

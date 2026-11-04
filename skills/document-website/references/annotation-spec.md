@@ -4,6 +4,7 @@
 - Coordinate system
 - Marker types
 - Colors
+- Defaults and style file
 - Text and fonts
 - JSON schema
 - Errors and warnings
@@ -77,6 +78,50 @@ Draws a text label on a colored background pill, with the text centered in the p
 
 Any CSS color Pillow understands: `"#E53935"`, `"#F00"`, `"rgb(229, 57, 53)"`, or a name such as `"orange"`. Colors are opaque.
 
+## Defaults and style file
+
+A field a marker leaves out is filled from the first of these that sets it:
+
+1. the field on the marker itself;
+2. command-line options: `--color` (arrows and boxes), `--bg` and `--fg` (circles and labels);
+3. the style file's `markers` section (`--style style.json`): first the per-type block (`markers.circle.radius`), then `markers.defaults`;
+4. the built-in defaults in the tables above (red `#E53935`, white text).
+
+The style file also checks sizes: `width` and `radius` must be at most 10000 px. Marker JSON passed with `--markers` is not capped.
+
+| Option | Meaning |
+|---|---|
+| `--style <file>` | Style file (JSON). Only its `markers` section is read here; the same file can also carry a `document` section for `build_docx.py` |
+| `--color <color>` | Color for arrows and boxes that set none |
+| `--bg <color>` | Fill for circles and labels that set none |
+| `--fg <color>` | Text color for circles and labels that set none |
+| `--no-auto-contrast` | Never replace a marker color for low contrast on the screenshot (see "Auto-contrast") |
+
+A command-line color is not an override: a marker that sets its own `color`, `bg`, or `fg` keeps it. Per-type blocks accept any field that marker type accepts except positions and text (`to`, `from`, `at`, `rect`, `label`, `text`). Every key, type, and default is in `references/style-file.md`.
+
+A bad `--color`, `--bg`, or `--fg` value, a missing or unreadable style file, or an invalid style value exits `2` and writes nothing. An unknown key in the style file prints a `[warn]` and is ignored.
+
+## Auto-contrast
+
+A marker whose color blends into the screenshot is hard to see, so `annotate.py` checks each marker and swaps a color that does not stand out. It is on by default.
+
+- **Sampling.** The marker is drawn once off-screen to learn its shape. The check then looks at a ring of screenshot pixels, 3 px wide, just outside that shape, and takes the 20th-percentile WCAG contrast ratio of the marker's color against them. Using the 20th percentile means a marker that blends into a fifth of its surroundings still counts as low contrast.
+- **Which color.** `color` for arrows and boxes; `bg` for circles and labels.
+- **Threshold.** The color is kept when it reaches `markers.min_contrast` in the style file (default `3.0`, range 1 to 21).
+- **Palette order.** Otherwise the first color that reaches the threshold is drawn, trying `markers.palette` from the style file first and then the built-in palette: `#E53935` (red), `#1565C0` (blue), `#FDD835` (yellow), `#000000`, `#FFFFFF`. When no color reaches the threshold, the best-scoring one is drawn (the marker's own color wins a tie).
+- **Text color.** For circles with a `label` and for labels, the text (`fg`) must reach 3.0:1 against the final fill, whatever `min_contrast` is. If not, it is drawn black or white, whichever contrasts more. The built-in white on `#E53935` is 4.23:1, so default markers keep white text.
+- **Markers off the image.** A marker with no screenshot pixels around it is left alone, and the off-image warning below still applies.
+- **Turning it off.** `--no-auto-contrast` for the whole run, `"auto_contrast": false` in the style file's `markers` section for every marker, in a per-type block (for example `markers.circle`) for one type, or `"auto_contrast": false` on a single marker (any of the four types).
+
+Every swap prints a `[warn]` naming the marker, the field, both colors, and both ratios:
+
+```
+[warn] marker 1 (circle): bg #E53935 has 1.6:1 contrast on the background; drew #000000 instead (7.7:1).
+[warn] marker 4 (circle): fg #FFFFFF has 1.4:1 contrast on bg #FDD835; drew #000000 instead (15.1:1).
+```
+
+A swap warning is expected, not a failure. If a marker must keep its exact color (a brand color, for instance), switch auto-contrast off for it.
+
 ## Text and fonts
 
 - Text is drawn in a bold sans-serif font: Arial Bold on Windows and macOS, DejaVu Sans Bold or Liberation Sans Bold on Linux.
@@ -106,13 +151,15 @@ Pass markers as a JSON array, in a UTF-8 file (preferred) or inline:
 |---|---|
 | `0` | Saved. `[warn]` lines may still need attention |
 | `1` | A file could not be read or written (input missing, not an image, output not writable) |
-| `2` | Invalid JSON, arguments, or markers. Every problem is listed as `[error] marker <n> (<type>): ...`; nothing is written |
+| `2` | Invalid JSON, arguments, style file, or markers. Every marker problem is listed as `[error] marker <n> (<type>): ...`; a style file problem names the file and key; nothing is written |
 
 Warnings (`[warn]` on stderr, image still saved):
 - unknown marker `type` (the marker is skipped)
 - marker outside, or cut off at, the image edge
 - a character no installed font has
 - right-to-left text without shaping support
+- a marker color that was swapped for low contrast (marker, field, old and new color, both ratios)
+- an unknown key in the style file (the key is ignored)
 
 ## Examples
 

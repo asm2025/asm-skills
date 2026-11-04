@@ -1,7 +1,7 @@
 {
   "name": "essential-skills",
-  "description": "Agent skills by asm2025. document-website screenshots a site with the Playwright MCP, annotates the screenshots, and builds a step-by-step tutorial as Word, Markdown, or HTML.",
-  "version": "1.0.0",
+  "description": "Agent skills by asm2025. document-website screenshots a site with the Playwright MCP, annotates the screenshots, and builds a step-by-step tutorial as Word, Markdown, or HTML (PDF on request).",
+  "version": "1.1.0",
   "author": {
     "name": "asm2025"
   },
@@ -11,7 +11,7 @@
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["@playwright/mcp@latest"]
+      "args": ["@playwright/mcp@latest", "--caps=storage"]
     }
   }
 }

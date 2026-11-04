@@ -20,7 +20,7 @@
 
 Preconditions:
 
-- `$RUN/work/proj/` from the **Project images** bullet of `build-docx.md` exists.
+- `$RUN/work/proj/` from the **Project images** bullet of `build-docx.md` exists. On a fresh `RUN` it needs `$RUN/evidence/markers-defaults.png` first; that bullet's precondition gives the command that generates it with `vdw run` and the baseline `page.png`. Run that first, then the **Project images** bullet.
 - Do not use `set -e`; the missing-image runs exit 1.
 
 - **Write steps.** Run `printf '%s' '[{"heading":"Open <the> page","body":"Use **bold** here.\nNext line.\n\nShow <b>tags</b> as text.","image":"shots/main page.png","caption":"Main page"},{"heading":"Missing","image":"shots/missing.png"}]' > "$RUN/work/proj/steps-text.json"`.

@@ -9,10 +9,13 @@ Python that `setup` prints as PY=..., because they need Pillow and python-docx.
     "$PY"   vdw.py doctor  --run "$RUN"
     "$PY"   vdw.py fixture --out "$RUN/work/page.png"
     "$PY"   vdw.py run     --run "$RUN" --name annotate-all -- "$PY" skills/document-website/scripts/annotate.py ...
+    "$PY"   vdw.py page    --kind appshell|bodyscroll   # prints a browser_evaluate function
     "$PY"   vdw.py probe   --image out.png --at 320,150 --at 10,10
     "$PY"   vdw.py find    --image out.png --color 255,255,255 --region 300,130,340,170
     "$PY"   vdw.py diff    --before in.png --after out.png
     "$PY"   vdw.py docx-dump --docx out.docx --out "$RUN/evidence/doc.txt"
+    "$PY"   vdw.py pdf-info --pdf out.pdf [--out "$RUN/evidence/pdf.txt"]
+    "$PY"   vdw.py template --out "$RUN/work/acme.docx" [--dotx] [--no-heading2]
     "$PY"   vdw.py cleanup --run "$RUN" [--venv]
 """
 
@@ -28,7 +31,7 @@ from pathlib import Path
 ROOT_DEFAULT = Path(tempfile.gettempdir()) / "verify-document-website"
 REPO = Path(__file__).resolve().parents[4]
 SCRIPTS = REPO / "skills" / "document-website" / "scripts"
-DEPS = ["Pillow", "python-docx", "arabic-reshaper", "python-bidi"]
+DEPS = ["Pillow", "python-docx", "pypdf", "arabic-reshaper", "python-bidi"]
 
 
 def venv_python(root: Path) -> Path:
@@ -132,6 +135,18 @@ def cmd_doctor(a):
 def cmd_fixture(a):
     from PIL import Image, ImageDraw
     w, h = (int(v) for v in a.size.lower().split("x"))
+    if a.kind == "contrast":
+        # Four full-height strips, a quarter of the width each.
+        colors = [(232, 131, 58), (0, 0, 0), (255, 255, 255), (119, 119, 119)]
+        img = Image.new("RGB", (w, h))
+        d = ImageDraw.Draw(img)
+        for i, col in enumerate(colors):
+            d.rectangle([w * i // 4, 0, w * (i + 1) // 4 - 1, h - 1], fill=col)
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        img.save(a.out)
+        print(f"fixture {posix(Path(a.out))} {w}x{h}: four strips, orange (232,131,58), "
+              f"black (0,0,0), white (255,255,255), gray (119,119,119), each {w // 4} px wide")
+        return
     img = Image.new("RGB", (w, h), (245, 246, 248))            # page background
     d = ImageDraw.Draw(img)
     d.rectangle([0, 0, w, 64], fill=(33, 47, 61))               # header bar
@@ -194,6 +209,41 @@ def cmd_run(a):
 
 
 # --------------------------------------------------------------------------- probe / diff
+
+PAGE_JS = {
+    "appshell": """() => {
+  document.documentElement.innerHTML = '<head><style>' +
+    'html, body { height: 100%; overflow: hidden; margin: 0; font-family: sans-serif }' +
+    '#header { height: 56px; background: rgb(33,47,61) }' +
+    '#shell { display: flex; height: calc(100% - 56px) }' +
+    '#sidebar { width: 240px; background: rgb(45,45,45); overflow-y: auto }' +
+    '#sidebar > div { height: 1000px }' +
+    '#right { flex: 1; display: flex; flex-direction: column; min-width: 0 }' +
+    '#crumb { height: 40px; background: rgb(220,224,230); flex: none }' +
+    '#content { flex: 1; overflow-y: auto; min-height: 0 }' +
+    '#col { height: 2000px; display: flex; flex-direction: column; justify-content: space-between }' +
+    '#last { width: 200px; height: 40px; background: rgb(0,160,0); flex: none }' +
+    '</style></head><body><div id="header"></div><div id="shell">' +
+    '<div id="sidebar"><div></div></div><div id="right"><div id="crumb"></div>' +
+    '<main id="content"><div id="col"><p>Top of the content box</p><div id="last"></div></div></main>' +
+    '</div></div></body>';
+  return [innerWidth, innerHeight];
+}""",
+    "bodyscroll": """() => {
+  document.documentElement.innerHTML = '<head><style>' +
+    'html { height: 100%; overflow: hidden }' +
+    'body { height: 100%; overflow-y: auto; margin: 0; font-family: sans-serif }' +
+    '#col { height: 2000px; display: flex; flex-direction: column; justify-content: space-between }' +
+    '#last { width: 200px; height: 40px; background: rgb(0,160,0); flex: none }' +
+    '</style></head><body><div id="col"><p>Top of the page</p><div id="last"></div></div></body>';
+  return [innerWidth, innerHeight];
+}""",
+}
+
+
+def cmd_page(a):
+    print(PAGE_JS[a.kind])
+
 
 def cmd_probe(a):
     from PIL import Image
@@ -270,11 +320,97 @@ def cmd_docx_dump(a):
     lines.append(f"inline images: {len(doc.inline_shapes)}")
     normal = doc.styles["Normal"].font.size
     lines.append(f"Normal style font size: {normal.pt if normal else None}")
+    sec = doc.sections[0]
+    lines.append(f"section: page {sec.page_width.inches:.2f}x{sec.page_height.inches:.2f}in margins "
+                 f"{sec.left_margin.inches:.2f}/{sec.right_margin.inches:.2f}/"
+                 f"{sec.top_margin.inches:.2f}/{sec.bottom_margin.inches:.2f}in")
+    lines.append("header: " + repr(" | ".join(p.text for p in sec.header.paragraphs if p.text)))
+    lines.append("footer: " + repr(" | ".join(p.text for p in sec.footer.paragraphs if p.text)))
+    lines.append(f"tables: {len(doc.tables)}")
+    for name in ("Normal", "Title", "Heading 2", "Caption"):
+        try:
+            st = doc.styles[name]
+        except KeyError:
+            lines.append(f"style {name}: missing")
+            continue
+        size = st.font.size.pt if st.font.size else None
+        color = st.font.color.rgb if st.font.color and st.font.color.type else None
+        align = st.paragraph_format.alignment
+        lines.append(f"style {name}: font={st.font.name} size={size} color={color} "
+                     f"bold={st.font.bold} italic={st.font.italic} "
+                     f"align={align if align is not None else '-'}")
     out = "\n".join(lines)
     print(out)
     if a.out:
         Path(a.out).write_text(out + "\n", encoding="utf-8")
         print(f"(saved {posix(Path(a.out))})")
+
+
+# --------------------------------------------------------------------------- pdf-info
+
+def cmd_pdf_info(a):
+    with open(a.pdf, "rb") as f:
+        head = f.read(5)
+    if head != b"%PDF-":
+        print(f"[vdw] not a PDF (does not start with %PDF-): {posix(Path(a.pdf))}")
+        sys.exit(1)
+    from pypdf import PdfReader
+    reader = PdfReader(a.pdf)
+    images = sum(len(page.images) for page in reader.pages)
+    text = (reader.pages[0].extract_text() or "") if reader.pages else ""
+    first = " ".join(text.split())[:60]
+    out = f"pages={len(reader.pages)} images={images} text_has={first}"
+    print(out)
+    if a.out:
+        Path(a.out).write_text(out + "\n", encoding="utf-8")
+        print(f"(saved {posix(Path(a.out))})")
+
+
+# --------------------------------------------------------------------------- template
+
+DOCX_MAIN = "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"
+DOTX_MAIN = "application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml"
+
+
+def cmd_template(a):
+    import zipfile
+    from docx import Document
+    from docx.shared import Inches, Pt, RGBColor
+    doc = Document()
+    sec = doc.sections[0]
+    sec.page_width, sec.page_height = Inches(8.5), Inches(11)
+    sec.left_margin = sec.right_margin = sec.top_margin = sec.bottom_margin = Inches(0.5)
+    sec.header.paragraphs[0].text = "ACME Header"
+    sec.footer.paragraphs[0].text = "ACME Footer"
+    doc.add_paragraph("TEMPLATE BODY TEXT")
+    doc.add_table(rows=2, cols=2)
+    h2 = doc.styles["Heading 2"]
+    h2.font.name = "Georgia"
+    h2.font.color.rgb = RGBColor.from_string("0B3D91")
+    doc.styles["Title"].font.color.rgb = RGBColor.from_string("8B0000")
+    cap = doc.styles["Caption"]
+    cap.font.italic = True
+    cap.font.size = Pt(8)
+    cap.font.color.rgb = RGBColor.from_string("008000")
+    if a.no_heading2:
+        el = doc.styles["Heading 2"].element
+        el.getparent().remove(el)
+    out = Path(a.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(str(out))
+    if a.dotx:
+        src = out.read_bytes()
+        tmp = out.with_name(out.name + ".tmp")
+        with zipfile.ZipFile(out) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if item.filename == "[Content_Types].xml":
+                    data = data.replace(DOCX_MAIN.encode(), DOTX_MAIN.encode())
+                zout.writestr(item, data)
+        tmp.replace(out)
+        assert out.read_bytes() != src
+    print(f"template {posix(out)}: Letter, margins 0.5 in, header/footer ACME, 2x2 table, "
+          f"{'.dotx content type, ' if a.dotx else ''}{'no Heading 2 style' if a.no_heading2 else 'Heading 2 Georgia 0B3D91'}")
 
 
 # --------------------------------------------------------------------------- cleanup
@@ -319,6 +455,8 @@ def main():
     p = sp.add_parser("fixture", help="write a synthetic 'web page' PNG with known colors")
     p.add_argument("--out", required=True)
     p.add_argument("--size", default="1280x720")
+    p.add_argument("--kind", choices=["form", "contrast"], default="form",
+                   help="form: the page with buttons (default); contrast: four color strips")
     p.set_defaults(fn=cmd_fixture)
 
     p = sp.add_parser("run", help="run a command from the repo root and record it as evidence")
@@ -327,6 +465,11 @@ def main():
     p.add_argument("--lock", help="Windows only: hold this file open with no sharing while the command runs")
     p.add_argument("cmd", nargs=argparse.REMAINDER)
     p.set_defaults(fn=cmd_run)
+
+    p = sp.add_parser("page", help="print a browser_evaluate function that builds a page that scrolls inside a box")
+    p.add_argument("--kind", choices=["appshell", "bodyscroll"], required=True,
+                   help="appshell: header, sidebar, and a main box that scrolls; bodyscroll: body is the scroll box")
+    p.set_defaults(fn=cmd_page)
 
     p = sp.add_parser("probe", help="print RGB at points")
     p.add_argument("--image", required=True)
@@ -350,6 +493,17 @@ def main():
     p.add_argument("--docx", required=True)
     p.add_argument("--out")
     p.set_defaults(fn=cmd_docx_dump)
+
+    p = sp.add_parser("pdf-info", help="print page count, image count, and first page text of a PDF")
+    p.add_argument("--pdf", required=True)
+    p.add_argument("--out")
+    p.set_defaults(fn=cmd_pdf_info)
+
+    p = sp.add_parser("template", help="write a Word template with a known header, footer, margins, and styles")
+    p.add_argument("--out", required=True)
+    p.add_argument("--dotx", action="store_true", help="use the .dotx (template) content type")
+    p.add_argument("--no-heading2", action="store_true", help="delete the Heading 2 style")
+    p.set_defaults(fn=cmd_template)
 
     p = sp.add_parser("cleanup", help="delete the run's work/ (keeps evidence/)")
     p.add_argument("--run", required=True)

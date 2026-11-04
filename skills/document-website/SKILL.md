@@ -21,7 +21,8 @@ This skill guides the agent through a repeatable workflow for producing step-by-
 ### 1  Gather context
 Before doing anything else, confirm:
 - **Target URL** — read it from the conversation or task description; never guess.
-- **Output format** — default is `.docx` (Word); use `.md` or `.html` if the user asks.
+- **Output format** — default is `.docx` (Word); use `.md` or `.html` if the user asks. Read the user's words for the type: "Word" means `.docx`, "web page" means `.html`, and "PDF" means `.pdf`, made only when the user asks; it needs Word (Windows), LibreOffice, or Chrome/Edge installed (see Dependencies).
+- **Template or reference** — ask whether there is a template or a reference document to follow; see `references/templates.md`.
 - **Sections / steps to document** — derive from the user's description or navigate the site to discover them.
 - **Output file** — default to `./docs/tutorial.<ext>` in the project folder, unless the user names another path.
 - **Screenshots folder** (`<shots>` below) — run this from the project folder and use the path it prints:
@@ -46,7 +47,9 @@ Always pass `filename` as an absolute path in `<shots>`, and pass `scale="css"`:
 - Without `filename`, the tool saves `page-<timestamp>.png` to its own output folder.
 - `scale="css"` (required by some releases) makes one image pixel equal one CSS pixel, so element positions from the page match image coordinates. Never use `scale="device"`.
 
-The MCP also writes page snapshots (`.yml`) to its output folder, `<project>/.playwright-mcp/` unless the MCP server was started with `--output-dir`. Add that folder, and `<shots>` if it is not already in an ignored temp folder, to the project's `.gitignore`.
+The MCP also writes page snapshots (`.yml`) to its output folder, `<project>/.playwright-mcp/` unless the server was started with `--output-dir`. Add that folder, and `<shots>` if it is not already in an ignored temp folder, to the project's `.gitignore`. To keep that folder out of the project, set `PLAYWRIGHT_MCP_OUTPUT_DIR` before the server starts (see `references/browser-modes.md`). Never move or delete `.playwright-mcp/` by hand while the server runs.
+
+**Sign-in.** If a page needs sign-in, follow `references/browser-modes.md`. In the headed browser, ask the user to sign in in the Playwright window and wait for them to say it is done; then offer to save the sign-in for later headless runs. It is a live session secret, so the rule is strict: save it to `<temp>/auth/<host>.json`, where `<temp>` is the first project temp folder `screenshot_dir.py` looks for (`!tmp`, `tmp`, `temp`, `.tmp`, `.temp`), never a path derived from the screenshots folder or `--dir`; ask the user if the project has no temp folder; and, in a git repo, refuse to save unless `git check-ignore -q '<path>'` exits `0` (quote the path). Outside a git repo that command exits `128`: save only under that temp folder, and warn the user that the file is a live secret. In headless mode with no saved sign-in, stop and explain the options. When the user says "use my Chrome," use a Playwright server registered with `--extension`, or give the one-line setup from the reference.
 
 **Viewport screenshot**
 ```
@@ -55,13 +58,7 @@ browser_take_screenshot  scale="css"  filename="<shots>/<step_name>.png"
 ```
 
 **Full-page screenshot**
-A full-page capture drops the page's scrollbar, which shifts centered content sideways. Hide the scrollbar first and measure (step 3) in that same state, then capture:
-```
-browser_evaluate         function="() => { document.documentElement.style.overflow = 'hidden'; scrollTo(0, 0); }"
-browser_take_screenshot  scale="css"  fullPage=true  filename="<shots>/<step_name>_full.png"
-browser_evaluate         function="() => { document.documentElement.style.overflow = ''; }"
-```
-Run the last line before interacting with the page again.
+Many web apps scroll inside a box (a main area next to a sidebar), where `fullPage=true` returns only the viewport. Follow `references/full-page.md`: run its detection function, then use the document recipe or the tall-window recipe it picks.
 
 **Element screenshot**
 To capture only one section, take an accessibility snapshot first, then screenshot that element by its reference. Current releases call the reference parameter `target` (older ones call it `ref`); pass `element`, a human-readable description of the element, alongside it.
@@ -84,7 +81,8 @@ Convert a box `x, y, w, h` to image pixels for the screenshot you took:
 | Screenshot | Image x, y |
 |---|---|
 | Viewport | `x, y` |
-| Full page | `x + scrollX, y + scrollY`, measured with the scrollbar hidden as in step 2 (after `scrollTo(0, 0)` the offset is 0) |
+| Full page, document scrolls | `x + scrollX, y + scrollY`, measured with the scrollbar hidden as in step 2 (after `scrollTo(0, 0)` the offset is 0) |
+| Full page, tall window | `x, y`, measured after the window is resized (`references/full-page.md`) |
 | Element | `x - ex, y - ey`, where `ex, ey` is the screenshotted element's box |
 
 Then point markers at the box: an arrow `to` the box's left-middle `[x, y + h/2]` or center, a `box` with `rect` `[x - 4, y - 4, w + 8, h + 8]`, a `circle` just outside a corner.
@@ -107,13 +105,14 @@ python3 <skill-dir>/scripts/annotate.py \
 See `references/annotation-spec.md` for every marker type and field.
 
 - Exit code `2` means invalid markers or arguments; each problem is listed as `[error] marker <n> ...` and nothing is written. Fix and rerun.
+- Colors come from the marker, then `--color`/`--bg`/`--fg`, then `--style` (see `references/style-file.md`). A `[warn]` about a swapped color is expected, not a failure: auto-contrast changed a color that blended into the screenshot.
 - Read every `[warn]` line. A marker outside or cut off at the image edge usually means wrong coordinates (see step 3). A missing-font or right-to-left warning means some text will not render correctly.
 - Open each annotated image and check that every marker points at the right element.
 
 Use annotated images (the `_annotated.png` variants) in the final document.
 
 ### 5  Assemble the document
-Write `<shots>/steps.json`, then build. The output format follows the `--output` extension: `.docx`, `.md`, or `.html`.
+Write `<shots>/steps.json`, then build. The output format follows the `--output` extension: `.docx`, `.md`, `.html`, or `.pdf` (only when the user asks for PDF).
 
 ```bash
 python3 <skill-dir>/scripts/build_docx.py \
@@ -141,11 +140,21 @@ python3 <skill-dir>/scripts/build_docx.py \
 | `image` | — | Screenshot path, or a list of paths for several screenshots in one step |
 | `caption` | — | Small italic line under the image(s) |
 
+Options for `build_docx.py`:
+
+| Option | Description |
+|---|---|
+| `--template <file>` | A `.docx` or `.dotx` for `.docx` output, and for `.pdf` output made by Word or LibreOffice. The body is cleared; styles, page setup, headers, and footers carry over. A style the template lacks (`Title`, `Heading 2`, `Caption`) is added with a basic look and a `[warn]`. Ignored with a warning for `.md` and `.html`, and for `.pdf` made by Chrome. A missing or non-Word file exits `2`. |
+| `--style <file>` | A style file (JSON). Only its `document` section is read: fonts, sizes, colors, and alignment for the title, headings, captions, and body, plus `page` (not with `--template`). It sets the Word styles, becomes CSS for `.html` (and for `.pdf` made by Chrome), and is ignored for `.md`. With a template, the style file wins for the keys it names. An invalid value exits `2`. See `references/style-file.md`. |
+| `--css <file>` | A CSS file added after the built-in and style-file CSS. Applies to `.html` output and to `.pdf` output made by Chrome; other formats, and `.pdf` made by Word or LibreOffice, print a `[warn]` and ignore it. A missing file exits `2`. |
+| `--pdf-engine <name>` | `auto` (default), `word`, `libreoffice`, or `chrome` (Chrome or Edge), for `.pdf` output only; other formats print a `[warn]` and ignore it. `auto` takes the first one found in the order Word, LibreOffice, Chrome, except that `--css` without `--template` tries Chrome first, because only Chrome uses CSS. A named engine that is not installed, or no engine at all, exits `2` and lists what was searched. |
+
 A relative `image` path is looked up from the current folder first, then from the folder that holds `steps.json`, so plain file names work when both are in `<shots>`.
 
 - **Word:** images keep their on-screen size, shrunk to fit 6 x 8 inches; small element screenshots are not enlarged. PNG and JPEG work; WebP does not.
 - **Markdown:** images are copied into `<name>_images/` beside the `.md` file (replaced on each build) and linked from there, so the tutorial keeps working after `<shots>` is cleaned up. Share the `.md` together with that folder.
 - **HTML:** one file with every image embedded, ready to share on its own.
+- **PDF:** Word and LibreOffice convert the `.docx` build (template and style file apply); Chrome prints the HTML build (style file and `--css` apply, `--template` does not). Conversion can take 30 seconds with Word. An engine failure exits `1`, prints the engine's error, and keeps the temp folder it built in; a PDF open in a viewer exits `1` like a locked `.docx`.
 
 Exit codes: `0` saved; `1` saved, but an image was missing or unreadable (each one becomes a red `[Image ...]` line in the document and an `[error]` line on stderr), or the file could not be written (for example, it is open in Word); `2` invalid `steps.json` or arguments, nothing written. On `1` or `2`, fix the cause and rebuild.
 
@@ -159,9 +168,10 @@ Exit codes: `0` saved; `1` saved, but an image was missing or unreadable (each o
 
 | Package | Purpose | Needed for |
 |---|---|---|
-| `Pillow` | Image annotation | Every run (`annotate.py`) |
-| `python-docx` | Build Word files | `.docx` output only |
+| `Pillow` | Image annotation, and reading style files | Every run (`annotate.py`, and `build_docx.py` through `style_file.py`) |
+| `python-docx` | Build and read Word files | `.docx` output, `.pdf` made by Word or LibreOffice, and `describe_docx.py` |
 | `arabic-reshaper`, `python-bidi` | Arabic, Hebrew, and other right-to-left text in markers | Optional; `annotate.py` warns when right-to-left text needs them |
+| PDF engine | Word (Windows), LibreOffice, or Chrome/Edge; no Python package | Optional; only for `.pdf` output (`--pdf-engine`) |
 | `@playwright/mcp` | Browser and screenshots | MCP server; the `essential-skills` Claude Code plugin registers it |
 
 The Python packages are listed in `<skill-dir>/requirements.txt`.
@@ -170,7 +180,7 @@ The Python packages are listed in `<skill-dir>/requirements.txt`.
 ```bash
 python3 -c "import PIL, docx; print('OK')"
 ```
-Leave out `docx` when the output is `.md` or `.html`.
+Leave out `docx` when the output is `.md`, `.html`, or a `.pdf` made by Chrome (and you are not running `describe_docx.py`). `PIL` is always needed.
 
 **If a package is missing**, tell the user which one and ask before installing it. Install with the same interpreter, so the packages land where the scripts look for them:
 ```bash
@@ -184,7 +194,12 @@ The scripts also check their own imports: `annotate.py` and a `.docx` build exit
 
 ## Reference Files
 - `references/annotation-spec.md` — marker types, fields, coordinate system, fonts, errors
+- `references/full-page.md` — full-page screenshots, including pages that scroll inside a box
+- `references/browser-modes.md` — headless, isolated, and own-Chrome modes, saved sign-in, keeping one Playwright server
+- `references/templates.md` — following a Word template or a Word or PDF reference document
+- `scripts/describe_docx.py` — prints the page setup, styles, and outline of a Word document
 - `scripts/annotate.py` — annotation CLI
-- `scripts/build_docx.py` — tutorial assembler CLI (`.docx`, `.md`, `.html`)
+- `scripts/build_docx.py` — tutorial assembler CLI (`.docx`, `.md`, `.html`, `.pdf`)
+- `scripts/pdf_engines.py` — finds and runs the PDF engines for `.pdf` output
 - `scripts/screenshot_dir.py` — picks and creates the screenshots folder
 - `requirements.txt` — Python packages the scripts need

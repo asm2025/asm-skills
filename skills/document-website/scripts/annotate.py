@@ -9,11 +9,17 @@ Usage:
     python3 annotate.py --input shot.png --output shot_annotated.png \
         --markers-file markers.json
 
+    python3 annotate.py --input shot.png --output shot_annotated.png \
+        --markers-file markers.json --style style.json --color "#1565C0"
+
 Marker files are read as UTF-8. Coordinates are pixels from the image's top-left
 corner. See references/annotation-spec.md for every marker type and field.
 
+A marker field it leaves out is filled from, in order: --color/--bg/--fg, the
+style file's markers section (--style), then the built-in defaults.
+
 Exit codes: 0 saved (warnings may be printed), 1 could not read or write a file,
-2 invalid arguments or markers (nothing is written).
+2 invalid arguments, style file, or markers (nothing is written).
 """
 
 import argparse
@@ -29,6 +35,11 @@ try:
     from PIL import Image, ImageColor, ImageDraw, ImageFont, features
 except ImportError:
     sys.exit("Pillow is not installed. Run: pip install Pillow")
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from contrast import choose, ratio, ring, score, text_on  # noqa: E402
+from style_file import (MARKER_FIELDS, StyleError, json_type, load_style,  # noqa: E402
+                        parse_color, validate_markers)
 
 
 DEFAULT_RED = "#E53935"
@@ -356,18 +367,109 @@ DRAWERS = {
 }
 
 
-def annotate(input_path: str, output_path: str, markers: list, font: str = None):
+def resolve(m: dict, mtype: str, defaults: dict) -> dict:
+    """Return the marker with missing fields filled from the defaults.
+
+    Order, first match wins: the marker itself, the command line
+    (defaults["cli"]: color, bg, fg), the style file's per-type block, the style
+    file's "defaults" block. Only fields the marker type accepts are filled;
+    anything still missing is left for the drawer's built-in default.
+    """
+    out = dict(m)
+    cli = defaults.get("cli") or {}
+    style = defaults.get("style") or {}
+    sources = (cli, style.get(mtype) or {}, style.get("defaults") or {})
+    for field in MARKER_FIELDS[mtype]:
+        if field in out:
+            continue
+        for src in sources:
+            if field in src:
+                out[field] = src[field]
+                break
+    return out
+
+
+# The field that carries each marker type's main color.
+MAIN_COLOR = {"arrow": "color", "box": "color", "circle": "bg", "label": "bg"}
+RING_WIDTH = 3
+
+
+def _hex(rgb) -> str:
+    return "#{:02X}{:02X}{:02X}".format(*rgb)
+
+
+def settle_colors(canvas: Canvas, scratch: Canvas, img, mtype: str, marker: dict,
+                  min_contrast: float, palette) -> dict:
+    """Return the marker with colors swapped where they would blend into the screenshot.
+
+    The marker is drawn once on the scratch canvas to learn its footprint. Only a
+    crop around it is measured, so a tall full-page screenshot stays fast. The
+    scratch canvas is cleared again and its warnings are discarded: font and
+    right-to-left warnings come from the real draw.
+    """
+    scratch.where = canvas.where
+    bx0, by0, bx1, by1 = DRAWERS[mtype](scratch, marker)
+    scratch.warnings.clear()
+    pad = RING_WIDTH + 1
+    w, h = img.size
+    box = (max(0, math.floor(bx0) - pad), max(0, math.floor(by0) - pad),
+           min(w, math.ceil(bx1) + pad + 1), min(h, math.ceil(by1) + pad + 1))
+    if box[0] >= box[2] or box[1] >= box[3]:
+        return marker  # entirely off the image: nothing to measure
+    alpha = scratch.overlay.crop(box).getchannel("A")
+    scratch.overlay.paste((0, 0, 0, 0), box)  # clear it for the next marker
+    mask = ring(alpha, RING_WIDTH)
+    background = img.crop(box).convert("RGB")
+
+    field = MAIN_COLOR[mtype]
+    out = dict(marker)
+    old = color(marker, field, DEFAULT_RED)
+    old_score = score(background, mask, old)
+    new, new_score = choose(background, mask, old, palette or [], min_contrast,
+                            preferred_score=old_score)
+    if new != old:
+        canvas.warnings.append(
+            f"{canvas.where}: {field} {_hex(old)} has {old_score:.1f}:1 contrast on the "
+            f"background; drew {_hex(new)} instead ({new_score:.1f}:1).")
+        out[field] = _hex(new)
+    else:
+        out[field] = _hex(old)
+
+    if mtype in ("circle", "label"):
+        has_text = bool(str(marker.get("label" if mtype == "circle" else "text", "")).strip())
+        if has_text:
+            fg = color(marker, "fg", WHITE)
+            fill = color(out, "bg", DEFAULT_RED)
+            drawn = text_on(fill, fg)
+            if drawn != fg:
+                canvas.warnings.append(
+                    f"{canvas.where}: fg {_hex(fg)} has {ratio(fg, fill):.1f}:1 contrast on "
+                    f"bg {_hex(fill)}; drew {_hex(drawn)} instead ({ratio(drawn, fill):.1f}:1).")
+                out["fg"] = _hex(drawn)
+    return out
+
+
+def annotate(input_path: str, output_path: str, markers: list, font: str = None,
+             defaults: dict = None, auto_contrast: bool = True,
+             min_contrast: float = 3.0, palette: list = None):
     """Draw markers onto input_path and save output_path.
+
+    defaults is {"cli": {...}, "style": markers_section}; see resolve().
+    With auto_contrast on (and not switched off for a marker), a marker color
+    that would blend into the screenshot is swapped for one that stands out,
+    using min_contrast and the style palette; each swap adds a warning.
 
     Returns the list of warnings. Raises MarkerError (nothing written) when a
     marker is invalid, and OSError when a file cannot be read or written.
     """
+    defaults = defaults or {}
     if not isinstance(markers, list):
-        raise MarkerError(f"markers must be a JSON array, got {type(markers).__name__}")
+        raise MarkerError(f"markers must be a JSON array, got {json_type(markers)}")
     img = Image.open(input_path)
     img.load()
     img = img.convert("RGBA")
     canvas = Canvas(img.size, font)
+    scratch = None  # allocated on the first marker that needs measuring
     w, h = img.size
     errors = []
 
@@ -382,7 +484,13 @@ def annotate(input_path: str, output_path: str, markers: list, font: str = None)
             continue
         canvas.where = f"marker {i} ({mtype})"
         try:
-            x0, y0, x1, y1 = DRAWERS[mtype](canvas, m)
+            marker = resolve(m, mtype, defaults)
+            if auto_contrast and marker.get("auto_contrast", True) is not False:
+                if scratch is None:
+                    scratch = Canvas(img.size, font)
+                marker = settle_colors(canvas, scratch, img, mtype, marker,
+                                       min_contrast, palette)
+            x0, y0, x1, y1 = DRAWERS[mtype](canvas, marker)
         except MarkerError as e:
             errors.append(f"marker {i} ({mtype}): {e}")
             continue
@@ -416,7 +524,42 @@ def main():
     group.add_argument("--markers",      help="JSON array string of markers")
     group.add_argument("--markers-file", help="Path to a UTF-8 JSON file containing the markers array")
     parser.add_argument("--font", help="TrueType/OpenType font file for all text, instead of the automatic choice")
+    parser.add_argument("--style", help="Style file (JSON); its markers section sets default colors and sizes")
+    parser.add_argument("--color", help="Default color for arrows and boxes that set none")
+    parser.add_argument("--bg", help="Default fill color for circles and labels that set none")
+    parser.add_argument("--fg", help="Default text color for circles and labels that set none")
+    parser.add_argument("--no-auto-contrast", action="store_true",
+                        help="Never replace a marker color for low contrast on the screenshot")
     args = parser.parse_args()
+
+    cli = {}
+    for opt in ("color", "bg", "fg"):
+        value = getattr(args, opt)
+        if value is None:
+            continue
+        try:
+            parse_color(value)
+        except StyleError:
+            print(f"[error] --{opt} is not a color: {json.dumps(value)} (use a CSS hex "
+                  "value like \"#E53935\" or a CSS color name)", file=sys.stderr)
+            sys.exit(2)
+        cli[opt] = value
+
+    style_warnings, style_errors = [], []
+    try:
+        sections, style_warnings = load_style(args.style)
+        style_errors, more = validate_markers(sections["markers"], args.style)
+        style_warnings += more
+    except StyleError as e:
+        style_errors = [str(e)]
+    if style_errors:
+        for w in style_warnings:
+            print(f"[warn] {w}", file=sys.stderr)
+        for line in style_errors:
+            print(f"[error] {line}", file=sys.stderr)
+        print("[error] Nothing was written.", file=sys.stderr)
+        sys.exit(2)
+    style = sections["markers"]
 
     if args.font:
         if not Path(args.font).is_file():
@@ -446,7 +589,12 @@ def main():
         print(f"[error] input image not found: {args.input}", file=sys.stderr)
         sys.exit(1)
     try:
-        warnings = annotate(args.input, args.output, markers, args.font)
+        warnings = annotate(
+            args.input, args.output, markers, args.font,
+            defaults={"cli": cli, "style": style},
+            auto_contrast=not args.no_auto_contrast and style.get("auto_contrast", True),
+            min_contrast=style.get("min_contrast", 3.0),
+            palette=style.get("palette"))
     except MarkerError as e:
         for line in str(e).splitlines():
             print(f"[error] {line}", file=sys.stderr)
@@ -456,7 +604,7 @@ def main():
         print(f"[error] {e}", file=sys.stderr)
         sys.exit(1)
 
-    for w in warnings:
+    for w in style_warnings + warnings:
         print(f"[warn] {w}", file=sys.stderr)
     print(f"Saved: {args.output}")
 
