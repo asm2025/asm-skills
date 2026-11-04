@@ -21,7 +21,8 @@ This skill guides the agent through a repeatable workflow for producing step-by-
 ### 1  Gather context
 Before doing anything else, confirm:
 - **Target URL** — read it from the conversation or task description; never guess.
-- **Output format** — default is `.docx` (Word); use `.md` or `.html` if the user asks. Make a `.pdf` only when the user asks for PDF; it needs Word (Windows), LibreOffice, or Chrome/Edge installed (see Dependencies).
+- **Output format** — default is `.docx` (Word); use `.md` or `.html` if the user asks. Read the user's words for the type: "Word" means `.docx`, "web page" means `.html`, and "PDF" means `.pdf`, made only when the user asks; it needs Word (Windows), LibreOffice, or Chrome/Edge installed (see Dependencies).
+- **Template or reference** — ask whether there is a template or a reference document to follow; see `references/templates.md`.
 - **Sections / steps to document** — derive from the user's description or navigate the site to discover them.
 - **Output file** — default to `./docs/tutorial.<ext>` in the project folder, unless the user names another path.
 - **Screenshots folder** (`<shots>` below) — run this from the project folder and use the path it prints:
@@ -196,6 +197,8 @@ The scripts also check their own imports: `annotate.py` and a `.docx` build exit
 
 ## Reference Files
 - `references/annotation-spec.md` — marker types, fields, coordinate system, fonts, errors
+- `references/templates.md` — following a Word template or a Word or PDF reference document
+- `scripts/describe_docx.py` — prints the page setup, styles, and outline of a Word document
 - `scripts/annotate.py` — annotation CLI
 - `scripts/build_docx.py` — tutorial assembler CLI (`.docx`, `.md`, `.html`, `.pdf`)
 - `scripts/pdf_engines.py` — finds and runs the PDF engines for `.pdf` output
