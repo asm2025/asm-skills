@@ -9,11 +9,17 @@ Usage:
     python3 annotate.py --input shot.png --output shot_annotated.png \
         --markers-file markers.json
 
+    python3 annotate.py --input shot.png --output shot_annotated.png \
+        --markers-file markers.json --style style.json --color "#1565C0"
+
 Marker files are read as UTF-8. Coordinates are pixels from the image's top-left
 corner. See references/annotation-spec.md for every marker type and field.
 
+A marker field it leaves out is filled from, in order: --color/--bg/--fg, the
+style file's markers section (--style), then the built-in defaults.
+
 Exit codes: 0 saved (warnings may be printed), 1 could not read or write a file,
-2 invalid arguments or markers (nothing is written).
+2 invalid arguments, style file, or markers (nothing is written).
 """
 
 import argparse
@@ -29,6 +35,10 @@ try:
     from PIL import Image, ImageColor, ImageDraw, ImageFont, features
 except ImportError:
     sys.exit("Pillow is not installed. Run: pip install Pillow")
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from style_file import (MARKER_FIELDS, StyleError, load_style,  # noqa: E402
+                        parse_color, validate_markers)
 
 
 DEFAULT_RED = "#E53935"
@@ -356,12 +366,41 @@ DRAWERS = {
 }
 
 
-def annotate(input_path: str, output_path: str, markers: list, font: str = None):
+def resolve(m: dict, mtype: str, defaults: dict) -> dict:
+    """Return the marker with missing fields filled from the defaults.
+
+    Order, first match wins: the marker itself, the command line
+    (defaults["cli"]: color, bg, fg), the style file's per-type block, the style
+    file's "defaults" block. Only fields the marker type accepts are filled;
+    anything still missing is left for the drawer's built-in default.
+    """
+    out = dict(m)
+    cli = defaults.get("cli") or {}
+    style = defaults.get("style") or {}
+    sources = (cli, style.get(mtype) or {}, style.get("defaults") or {})
+    for field in MARKER_FIELDS[mtype]:
+        if field in out:
+            continue
+        for src in sources:
+            if field in src:
+                out[field] = src[field]
+                break
+    return out
+
+
+def annotate(input_path: str, output_path: str, markers: list, font: str = None,
+             defaults: dict = None, auto_contrast: bool = True,
+             min_contrast: float = 3.0, palette: list = None):
     """Draw markers onto input_path and save output_path.
+
+    defaults is {"cli": {...}, "style": markers_section}; see resolve().
+    auto_contrast, min_contrast, and palette are accepted for the contrast
+    check and have no effect yet.
 
     Returns the list of warnings. Raises MarkerError (nothing written) when a
     marker is invalid, and OSError when a file cannot be read or written.
     """
+    defaults = defaults or {}
     if not isinstance(markers, list):
         raise MarkerError(f"markers must be a JSON array, got {type(markers).__name__}")
     img = Image.open(input_path)
@@ -382,7 +421,7 @@ def annotate(input_path: str, output_path: str, markers: list, font: str = None)
             continue
         canvas.where = f"marker {i} ({mtype})"
         try:
-            x0, y0, x1, y1 = DRAWERS[mtype](canvas, m)
+            x0, y0, x1, y1 = DRAWERS[mtype](canvas, resolve(m, mtype, defaults))
         except MarkerError as e:
             errors.append(f"marker {i} ({mtype}): {e}")
             continue
@@ -416,7 +455,39 @@ def main():
     group.add_argument("--markers",      help="JSON array string of markers")
     group.add_argument("--markers-file", help="Path to a UTF-8 JSON file containing the markers array")
     parser.add_argument("--font", help="TrueType/OpenType font file for all text, instead of the automatic choice")
+    parser.add_argument("--style", help="Style file (JSON); its markers section sets default colors and sizes")
+    parser.add_argument("--color", help="Default color for arrows and boxes that set none")
+    parser.add_argument("--bg", help="Default fill color for circles and labels that set none")
+    parser.add_argument("--fg", help="Default text color for circles and labels that set none")
+    parser.add_argument("--no-auto-contrast", action="store_true",
+                        help="Never replace a marker color for low contrast on the screenshot")
     args = parser.parse_args()
+
+    cli = {}
+    for opt in ("color", "bg", "fg"):
+        value = getattr(args, opt)
+        if value is None:
+            continue
+        try:
+            parse_color(value)
+        except StyleError:
+            print(f"[error] --{opt} is not a color: {json.dumps(value)} (use a CSS hex "
+                  "value like \"#E53935\" or a CSS color name)", file=sys.stderr)
+            sys.exit(2)
+        cli[opt] = value
+
+    try:
+        sections, style_warnings = load_style(args.style)
+        style_errors, more = validate_markers(sections["markers"], args.style)
+        style_warnings += more
+    except StyleError as e:
+        style_errors, style_warnings = [str(e)], []
+    if style_errors:
+        for line in style_errors:
+            print(f"[error] {line}", file=sys.stderr)
+        print("[error] Nothing was written.", file=sys.stderr)
+        sys.exit(2)
+    style = sections["markers"]
 
     if args.font:
         if not Path(args.font).is_file():
@@ -446,7 +517,12 @@ def main():
         print(f"[error] input image not found: {args.input}", file=sys.stderr)
         sys.exit(1)
     try:
-        warnings = annotate(args.input, args.output, markers, args.font)
+        warnings = annotate(
+            args.input, args.output, markers, args.font,
+            defaults={"cli": cli, "style": style},
+            auto_contrast=not args.no_auto_contrast and style.get("auto_contrast", True),
+            min_contrast=style.get("min_contrast", 3.0),
+            palette=style.get("palette"))
     except MarkerError as e:
         for line in str(e).splitlines():
             print(f"[error] {line}", file=sys.stderr)
@@ -456,7 +532,7 @@ def main():
         print(f"[error] {e}", file=sys.stderr)
         sys.exit(1)
 
-    for w in warnings:
+    for w in style_warnings + warnings:
         print(f"[warn] {w}", file=sys.stderr)
     print(f"Saved: {args.output}")
 
