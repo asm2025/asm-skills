@@ -87,6 +87,8 @@ A field a marker leaves out is filled from the first of these that sets it:
 3. the style file's `markers` section (`--style style.json`): first the per-type block (`markers.circle.radius`), then `markers.defaults`;
 4. the built-in defaults in the tables above (red `#E53935`, white text).
 
+The style file also checks sizes: `width` and `radius` must be at most 10000 px. Marker JSON passed with `--markers` is not capped.
+
 | Option | Meaning |
 |---|---|
 | `--style <file>` | Style file (JSON). Only its `markers` section is read here; the same file can also carry a `document` section for `build_docx.py` |

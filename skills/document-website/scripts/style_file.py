@@ -39,7 +39,8 @@ MARKER_OPTIONS = {"auto_contrast", "min_contrast", "palette"}
 COLOR_FIELDS = {"color", "bg", "fg"}
 # Integer fields and their minimums.
 INT_MINIMUMS = {"width": 1, "radius": 1, "font_size": 1}
-INT_MAXIMUMS = {"width": 10000, "radius": 10000, "font_size": 1638}
+MAX_FONT_SIZE = 1638   # Word's largest font size, in points
+INT_MAXIMUMS = {"width": 10000, "radius": 10000, "font_size": MAX_FONT_SIZE}
 # Box corner radius may be 0.
 BOX_RADIUS_MINIMUM = 0
 
@@ -69,7 +70,6 @@ def json_type(v) -> str:
     return "object"
 
 
-MAX_FONT_SIZE = 1638   # Word's largest font size, in points
 MAX_MARGIN_IN = 20     # inches; far past any real page
 
 
