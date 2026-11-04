@@ -67,17 +67,22 @@ def score(background: Image.Image, mask: Image.Image, rgb):
     return ratios[int(0.2 * (len(ratios) - 1))]
 
 
+_UNSET = object()
+
+
 def choose(background: Image.Image, mask: Image.Image, preferred_rgb, palette,
-           min_contrast: float):
+           min_contrast: float, preferred_score=_UNSET):
     """Return (rgb, score) for the color to draw.
 
     The preferred color when it reaches min_contrast; otherwise the first color
     of palette (the style palette, then BUILTIN_PALETTE) that does; otherwise the
     highest-scoring candidate, the preferred color winning ties. With an empty
     mask there is nothing to measure, so the preferred color is kept (score None).
+    Pass preferred_score when the caller already measured the preferred color.
     """
     preferred = tuple(preferred_rgb[:3])
-    best = score(background, mask, preferred)
+    best = (score(background, mask, preferred) if preferred_score is _UNSET
+            else preferred_score)
     if best is None or best >= min_contrast:
         return preferred, best
     best_rgb = preferred

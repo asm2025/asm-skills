@@ -37,8 +37,7 @@ except ImportError:
     sys.exit("Pillow is not installed. Run: pip install Pillow")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from contrast import (BUILTIN_PALETTE, TEXT_MIN_CONTRAST, choose,  # noqa: E402,F401
-                      ratio, ring, score, text_on)
+from contrast import choose, ratio, ring, score, text_on  # noqa: E402
 from style_file import (MARKER_FIELDS, StyleError, load_style,  # noqa: E402
                         parse_color, validate_markers)
 
@@ -425,9 +424,10 @@ def settle_colors(canvas: Canvas, scratch: Canvas, img, mtype: str, marker: dict
     field = MAIN_COLOR[mtype]
     out = dict(marker)
     old = color(marker, field, DEFAULT_RED)
-    new, new_score = choose(background, mask, old, palette or [], min_contrast)
+    old_score = score(background, mask, old)
+    new, new_score = choose(background, mask, old, palette or [], min_contrast,
+                            preferred_score=old_score)
     if new != old:
-        old_score = score(background, mask, old)
         canvas.warnings.append(
             f"{canvas.where}: {field} {_hex(old)} has {old_score:.1f}:1 contrast on the "
             f"background; drew {_hex(new)} instead ({new_score:.1f}:1).")
@@ -469,7 +469,7 @@ def annotate(input_path: str, output_path: str, markers: list, font: str = None,
     img.load()
     img = img.convert("RGBA")
     canvas = Canvas(img.size, font)
-    scratch = Canvas(img.size, font) if auto_contrast else None
+    scratch = None  # allocated on the first marker that needs measuring
     w, h = img.size
     errors = []
 
@@ -485,7 +485,9 @@ def annotate(input_path: str, output_path: str, markers: list, font: str = None,
         canvas.where = f"marker {i} ({mtype})"
         try:
             marker = resolve(m, mtype, defaults)
-            if scratch is not None and marker.get("auto_contrast", True) is not False:
+            if auto_contrast and marker.get("auto_contrast", True) is not False:
+                if scratch is None:
+                    scratch = Canvas(img.size, font)
                 marker = settle_colors(canvas, scratch, img, mtype, marker,
                                        min_contrast, palette)
             x0, y0, x1, y1 = DRAWERS[mtype](canvas, marker)

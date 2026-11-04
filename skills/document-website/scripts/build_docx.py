@@ -537,9 +537,10 @@ def build_pdf(title: str, steps: list, output: Path, opts: BuildOptions) -> list
             else:
                 doc = tmp / "tutorial.docx"
                 problems = build_docx(title, steps, doc, opts)
-                convert = (pdf_engines.docx_to_pdf_word if opts.pdf_engine == "word"
-                           else pdf_engines.docx_to_pdf_libreoffice)
-                convert(doc, pdf)
+                if opts.pdf_engine == "word":
+                    pdf_engines.docx_to_pdf_word(doc, pdf)
+                else:
+                    pdf_engines.docx_to_pdf_libreoffice(doc, pdf, opts.pdf_program)
         except pdf_engines.PdfEngineError as e:
             keep = True
             raise pdf_engines.PdfEngineError(f"{e}\nThe temp folder was kept for inspection: {tmp}")

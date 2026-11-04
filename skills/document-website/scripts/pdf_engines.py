@@ -188,8 +188,9 @@ def docx_to_pdf_word(docx: Path, pdf: Path, timeout: int = 180) -> None:
         raise PdfEngineError("Word finished but wrote no PDF:\n" + _tail(err or out))
 
 
-def docx_to_pdf_libreoffice(docx: Path, pdf: Path, timeout: int = 180) -> None:
-    exe = find_engines()["libreoffice"]
+def docx_to_pdf_libreoffice(docx: Path, pdf: Path, program: str = None,
+                            timeout: int = 180) -> None:
+    exe = program or find_engines()["libreoffice"]
     if not exe:
         raise PdfEngineError("LibreOffice was not found")
     docx = Path(docx).resolve()

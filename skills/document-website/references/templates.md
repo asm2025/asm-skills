@@ -23,9 +23,9 @@ Write a style file (see `style-file.md`) whose `document` section matches what y
 - `Normal` font, size, and color become `document.font`, `font_size`, and `color`.
 - `Title` becomes `document.title` (`font`, `size`, `color`, `bold`, `align`).
 - `Heading 2` becomes `document.heading`; captions become `document.caption`.
-- Page size (`letter` or `a4`) and margins in inches become `document.page`.
+- Page size (`letter` or `a4`) becomes `document.page.size`, and the margins in inches become `document.page.margins_in`.
 
-Pass it with `--style`. The same file styles `.html` output, and `.pdf` output made by Chrome.
+Pass it with `--style`. When the build uses `--template` instead, page settings come from the template, and `document.page` is ignored with a `[warn]`. The same file styles `.html` output, and `.pdf` output made by Chrome.
 
 ## Mirror the structure and voice
 

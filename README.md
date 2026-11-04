@@ -4,7 +4,7 @@ Agent skills. Each folder under `skills/` is self-contained: a `SKILL.md` the ag
 
 | Skill | What it does |
 |---|---|
-| [`document-website`](skills/document-website/SKILL.md) | Screenshots a website with the Playwright MCP, annotates the screenshots (arrows, numbered badges, highlight boxes, labels), and builds a step-by-step tutorial as Word, Markdown, or self-contained HTML. A style file styles the markers and the document; see the [style file example](skills/document-website/references/style-file.md). |
+| [`document-website`](skills/document-website/SKILL.md) | Screenshots a website with the Playwright MCP, annotates the screenshots (arrows, numbered badges, highlight boxes, labels), and builds a step-by-step tutorial as Word, Markdown, or self-contained HTML, and as PDF when you ask for one. A style file styles the markers and the document; see the [style file example](skills/document-website/references/style-file.md). |
 
 ## Install
 

@@ -38,6 +38,7 @@ Run the detection function once, with the browser at the tutorial's viewport siz
 
 - `documentScrolls` is `true`: use "Document scrolls".
 - `box` is not `null`: use "Page scrolls inside a box".
+- Both: use "Document scrolls" first, then run the detection function again. If `box` is still not `null`, the page also scrolls inside a box: follow "Page scrolls inside a box" as well.
 - Neither: the viewport screenshot already is the full page.
 
 ## Document scrolls

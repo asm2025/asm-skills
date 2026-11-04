@@ -81,13 +81,15 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Describe the page setup, styles, and outline of a Word document.")
     ap.add_argument("file", help=".docx or .dotx file")
     args = ap.parse_args()
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
     try:
         doc = open_template(Path(args.file))
     except StepsError as e:
         print(f"[error] {e}", file=sys.stderr)
         return 2
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
     print("\n".join(describe(doc)))
     return 0
 
