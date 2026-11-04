@@ -21,7 +21,7 @@ This skill guides the agent through a repeatable workflow for producing step-by-
 ### 1  Gather context
 Before doing anything else, confirm:
 - **Target URL** — read it from the conversation or task description; never guess.
-- **Output format** — default is `.docx` (Word); use `.md` or `.html` if the user asks.
+- **Output format** — default is `.docx` (Word); use `.md` or `.html` if the user asks. Make a `.pdf` only when the user asks for PDF; it needs Word (Windows), LibreOffice, or Chrome/Edge installed (see Dependencies).
 - **Sections / steps to document** — derive from the user's description or navigate the site to discover them.
 - **Output file** — default to `./docs/tutorial.<ext>` in the project folder, unless the user names another path.
 - **Screenshots folder** (`<shots>` below) — run this from the project folder and use the path it prints:
@@ -114,7 +114,7 @@ See `references/annotation-spec.md` for every marker type and field.
 Use annotated images (the `_annotated.png` variants) in the final document.
 
 ### 5  Assemble the document
-Write `<shots>/steps.json`, then build. The output format follows the `--output` extension: `.docx`, `.md`, or `.html`.
+Write `<shots>/steps.json`, then build. The output format follows the `--output` extension: `.docx`, `.md`, `.html`, or `.pdf` (only when the user asks for PDF).
 
 ```bash
 python3 <skill-dir>/scripts/build_docx.py \
@@ -146,15 +146,17 @@ Options for `build_docx.py`:
 
 | Option | Description |
 |---|---|
-| `--template <file>` | A `.docx` or `.dotx` for `.docx` output. The body is cleared; styles, page setup, headers, and footers carry over. A style the template lacks (`Title`, `Heading 2`, `Caption`) is added with a basic look and a `[warn]`. Ignored with a warning for `.md` and `.html`. A missing or non-Word file exits `2`. |
-| `--style <file>` | A style file (JSON). Only its `document` section is read: fonts, sizes, colors, and alignment for the title, headings, captions, and body, plus `page` (not with `--template`). It sets the Word styles, becomes CSS for `.html`, and is ignored for `.md`. With a template, the style file wins for the keys it names. An invalid value exits `2`. See `references/style-file.md`. |
-| `--css <file>` | A CSS file added after the built-in and style-file CSS. `.html` output only; other formats print a `[warn]` and ignore it. A missing file exits `2`. |
+| `--template <file>` | A `.docx` or `.dotx` for `.docx` output, and for `.pdf` output made by Word or LibreOffice. The body is cleared; styles, page setup, headers, and footers carry over. A style the template lacks (`Title`, `Heading 2`, `Caption`) is added with a basic look and a `[warn]`. Ignored with a warning for `.md` and `.html`, and for `.pdf` made by Chrome. A missing or non-Word file exits `2`. |
+| `--style <file>` | A style file (JSON). Only its `document` section is read: fonts, sizes, colors, and alignment for the title, headings, captions, and body, plus `page` (not with `--template`). It sets the Word styles, becomes CSS for `.html` (and for `.pdf` made by Chrome), and is ignored for `.md`. With a template, the style file wins for the keys it names. An invalid value exits `2`. See `references/style-file.md`. |
+| `--css <file>` | A CSS file added after the built-in and style-file CSS. Applies to `.html` output and to `.pdf` output made by Chrome; other formats, and `.pdf` made by Word or LibreOffice, print a `[warn]` and ignore it. A missing file exits `2`. |
+| `--pdf-engine <name>` | `auto` (default), `word`, `libreoffice`, or `chrome` (Chrome or Edge), for `.pdf` output only; other formats print a `[warn]` and ignore it. `auto` takes the first one found in the order Word, LibreOffice, Chrome, except that `--css` without `--template` tries Chrome first, because only Chrome uses CSS. A named engine that is not installed, or no engine at all, exits `2` and lists what was searched. |
 
 A relative `image` path is looked up from the current folder first, then from the folder that holds `steps.json`, so plain file names work when both are in `<shots>`.
 
 - **Word:** images keep their on-screen size, shrunk to fit 6 x 8 inches; small element screenshots are not enlarged. PNG and JPEG work; WebP does not.
 - **Markdown:** images are copied into `<name>_images/` beside the `.md` file (replaced on each build) and linked from there, so the tutorial keeps working after `<shots>` is cleaned up. Share the `.md` together with that folder.
 - **HTML:** one file with every image embedded, ready to share on its own.
+- **PDF:** Word and LibreOffice convert the `.docx` build (template and style file apply); Chrome prints the HTML build (style file and `--css` apply, `--template` does not). Conversion can take 30 seconds with Word. An engine failure exits `1`, prints the engine's error, and keeps the temp folder it built in; a PDF open in a viewer exits `1` like a locked `.docx`.
 
 Exit codes: `0` saved; `1` saved, but an image was missing or unreadable (each one becomes a red `[Image ...]` line in the document and an `[error]` line on stderr), or the file could not be written (for example, it is open in Word); `2` invalid `steps.json` or arguments, nothing written. On `1` or `2`, fix the cause and rebuild.
 
@@ -168,9 +170,10 @@ Exit codes: `0` saved; `1` saved, but an image was missing or unreadable (each o
 
 | Package | Purpose | Needed for |
 |---|---|---|
-| `Pillow` | Image annotation | Every run (`annotate.py`) |
+| `Pillow` | Image annotation, and reading style files | Every run (`annotate.py`, and `build_docx.py` through `style_file.py`) |
 | `python-docx` | Build Word files | `.docx` output only |
 | `arabic-reshaper`, `python-bidi` | Arabic, Hebrew, and other right-to-left text in markers | Optional; `annotate.py` warns when right-to-left text needs them |
+| PDF engine | Word (Windows), LibreOffice, or Chrome/Edge; no Python package | Optional; only for `.pdf` output (`--pdf-engine`) |
 | `@playwright/mcp` | Browser and screenshots | MCP server; the `essential-skills` Claude Code plugin registers it |
 
 The Python packages are listed in `<skill-dir>/requirements.txt`.
@@ -179,7 +182,7 @@ The Python packages are listed in `<skill-dir>/requirements.txt`.
 ```bash
 python3 -c "import PIL, docx; print('OK')"
 ```
-Leave out `docx` when the output is `.md` or `.html`.
+Leave out `docx` when the output is `.md`, `.html`, or a `.pdf` made by Chrome.
 
 **If a package is missing**, tell the user which one and ask before installing it. Install with the same interpreter, so the packages land where the scripts look for them:
 ```bash
@@ -194,6 +197,7 @@ The scripts also check their own imports: `annotate.py` and a `.docx` build exit
 ## Reference Files
 - `references/annotation-spec.md` — marker types, fields, coordinate system, fonts, errors
 - `scripts/annotate.py` — annotation CLI
-- `scripts/build_docx.py` — tutorial assembler CLI (`.docx`, `.md`, `.html`)
+- `scripts/build_docx.py` — tutorial assembler CLI (`.docx`, `.md`, `.html`, `.pdf`)
+- `scripts/pdf_engines.py` — finds and runs the PDF engines for `.pdf` output
 - `scripts/screenshot_dir.py` — picks and creates the screenshots folder
 - `requirements.txt` — Python packages the scripts need

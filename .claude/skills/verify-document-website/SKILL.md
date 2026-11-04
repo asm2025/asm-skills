@@ -26,7 +26,7 @@ echo "PY=$PY RUN=$RUN SHOTS=$SHOTS"
 ```
 
 - Use `python` on Windows, `python3` on macOS/Linux, for this one call only. From here on, use `"$PY"` (the venv interpreter) for everything.
-- `setup` creates `<tempdir>/verify-document-website/venv` the first time (about 20 s with network) and reuses it after that. It runs `pip install Pillow python-docx arabic-reshaper python-bidi` each time, which is a no-op when they are already installed.
+- `setup` creates `<tempdir>/verify-document-website/venv` the first time (about 20 s with network) and reuses it after that. It runs `pip install Pillow python-docx pypdf arabic-reshaper python-bidi` each time, which is a no-op when they are already installed.
 - Every `setup` call makes a new `RUN=<tempdir>/verify-document-website/runs/<timestamp>-<pid>/` with `work/` (inputs, scratch) and `evidence/` (proof).
 - `SHOTS=<screenshots folder>/vdw-<run id>` is where browser screenshots go: the Playwright MCP refuses to write outside the repo. The screenshots folder is the one the skill's `screenshot_dir.py` picks for the repo (`<repo>/screenshots/`, git-ignored, unless the repo has a temp folder). `cleanup` deletes `$SHOTS`, and the screenshots folder too when it is left empty; copy anything you keep into `$RUN`.
 - Ready means `doctor` exits 0.

@@ -13,6 +13,7 @@ Python that `setup` prints as PY=..., because they need Pillow and python-docx.
     "$PY"   vdw.py find    --image out.png --color 255,255,255 --region 300,130,340,170
     "$PY"   vdw.py diff    --before in.png --after out.png
     "$PY"   vdw.py docx-dump --docx out.docx --out "$RUN/evidence/doc.txt"
+    "$PY"   vdw.py pdf-info --pdf out.pdf [--out "$RUN/evidence/pdf.txt"]
     "$PY"   vdw.py template --out "$RUN/work/acme.docx" [--dotx] [--no-heading2]
     "$PY"   vdw.py cleanup --run "$RUN" [--venv]
 """
@@ -29,7 +30,7 @@ from pathlib import Path
 ROOT_DEFAULT = Path(tempfile.gettempdir()) / "verify-document-website"
 REPO = Path(__file__).resolve().parents[4]
 SCRIPTS = REPO / "skills" / "document-website" / "scripts"
-DEPS = ["Pillow", "python-docx", "arabic-reshaper", "python-bidi"]
+DEPS = ["Pillow", "python-docx", "pypdf", "arabic-reshaper", "python-bidi"]
 
 
 def venv_python(root: Path) -> Path:
@@ -309,6 +310,26 @@ def cmd_docx_dump(a):
         print(f"(saved {posix(Path(a.out))})")
 
 
+# --------------------------------------------------------------------------- pdf-info
+
+def cmd_pdf_info(a):
+    with open(a.pdf, "rb") as f:
+        head = f.read(5)
+    if head != b"%PDF-":
+        print(f"[vdw] not a PDF (does not start with %PDF-): {posix(Path(a.pdf))}")
+        sys.exit(1)
+    from pypdf import PdfReader
+    reader = PdfReader(a.pdf)
+    images = sum(len(page.images) for page in reader.pages)
+    text = (reader.pages[0].extract_text() or "") if reader.pages else ""
+    first = " ".join(text.split())[:60]
+    out = f"pages={len(reader.pages)} images={images} text_has={first}"
+    print(out)
+    if a.out:
+        Path(a.out).write_text(out + "\n", encoding="utf-8")
+        print(f"(saved {posix(Path(a.out))})")
+
+
 # --------------------------------------------------------------------------- template
 
 DOCX_MAIN = "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"
@@ -431,6 +452,11 @@ def main():
     p.add_argument("--docx", required=True)
     p.add_argument("--out")
     p.set_defaults(fn=cmd_docx_dump)
+
+    p = sp.add_parser("pdf-info", help="print page count, image count, and first page text of a PDF")
+    p.add_argument("--pdf", required=True)
+    p.add_argument("--out")
+    p.set_defaults(fn=cmd_pdf_info)
 
     p = sp.add_parser("template", help="write a Word template with a known header, footer, margins, and styles")
     p.add_argument("--out", required=True)

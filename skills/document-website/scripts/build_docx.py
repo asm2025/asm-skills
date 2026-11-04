@@ -6,13 +6,14 @@ The output format follows the --output extension:
     .docx         Word document (needs python-docx)
     .md           Markdown, with the images copied into <name>_images/ beside it
     .html / .htm  one self-contained HTML file with the images embedded
+    .pdf          PDF through Word (Windows), LibreOffice, or Chrome/Edge (--pdf-engine)
 
 Usage:
     python3 build_docx.py \
         --title  "My App - Getting Started" \
         --steps  steps.json \
         --output tutorial.docx \
-        [--template company.docx] [--style style.json] [--css extra.css]
+        [--template company.docx] [--style style.json] [--css extra.css] [--pdf-engine auto]
 
 steps.json (UTF-8) is an array of steps:
 [
@@ -30,8 +31,14 @@ cleared, and its styles, page setup, headers, and footers carry over.
 
 --style reads the "document" section of a style file (see references/style-file.md): fonts,
 sizes, colors, and alignment for the Word styles Normal, Title, Heading 2, and Caption, and the
-page setup (not with --template). For .html it becomes CSS. --css (.html only) adds a stylesheet
-after that. For a template, the style file wins for the keys it names.
+page setup (not with --template). For .html it becomes CSS. --css (.html output, and .pdf output
+built with Chrome) adds a stylesheet after that. For a template, the style file wins for the keys
+it names.
+
+.pdf output: Word and LibreOffice convert a .docx built with the template and style file; Chrome
+(or Edge) prints the HTML build, so --style and --css apply and --template does not. --pdf-engine
+auto takes the first of Word, LibreOffice, Chrome found (Chrome first when --css is given without
+--template). Only a .pdf output starts an engine.
 
 A relative image path is looked up from the current directory first, then from
 the folder that holds steps.json.
@@ -51,6 +58,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import zipfile
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -58,6 +66,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pdf_engines  # noqa: E402  (used as a module so tests can replace find_engines)
 from style_file import (StyleError, load_style, parse_color,  # noqa: E402
                         validate_document)
 
@@ -77,6 +86,8 @@ class BuildOptions:
     document: Any = None           # the opened template (python-docx Document), set by main()
     style: dict = field(default_factory=dict)  # the style file's "document" section
     css: str | None = None         # contents of --css
+    pdf_engine: str = ""           # the engine main() picked for .pdf output
+    pdf_program: str = ""          # what runs that engine (path, or "COM" for Word)
 
 
 # ---------------------------------------------------------------------------
@@ -257,6 +268,8 @@ def apply_document_style(doc, style: dict, has_template: bool, warned: set | Non
                  block.get("bold"), block.get("italic"))
         if "align" in block:
             st.paragraph_format.alignment = getattr(WD_ALIGN_PARAGRAPH, ALIGN_NAMES[block["align"]])
+        elif key == "caption" and not has_template:
+            st.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER  # the built-in look
 
     page = style.get("page")
     if page:
@@ -497,7 +510,48 @@ def build_html(title: str, steps: list, output: Path, opts: BuildOptions) -> lis
     return problems
 
 
-BUILDERS = {".docx": build_docx, ".md": build_md, ".html": build_html, ".htm": build_html}
+# ---------------------------------------------------------------------------
+# PDF
+# ---------------------------------------------------------------------------
+
+def check_writable(output: Path) -> None:
+    """Raise PermissionError when an existing output is held open (for example, by a PDF viewer)."""
+    if output.exists():
+        with open(output, "ab"):
+            pass
+
+
+def build_pdf(title: str, steps: list, output: Path, opts: BuildOptions) -> list:
+    """Build the tutorial in a temp folder, convert it with the engine main() picked, and copy
+    the PDF to `output`. The temp folder is removed unless the engine fails."""
+    check_writable(output)  # before building or starting an engine
+    tmp = Path(tempfile.mkdtemp(prefix="document-website-pdf-"))
+    keep = False
+    try:
+        pdf = tmp / "tutorial.pdf"
+        try:
+            if opts.pdf_engine == "chrome":
+                page = tmp / "tutorial.html"
+                problems = build_html(title, steps, page, opts)
+                pdf_engines.html_to_pdf_chrome(page, pdf, opts.pdf_program)
+            else:
+                doc = tmp / "tutorial.docx"
+                problems = build_docx(title, steps, doc, opts)
+                convert = (pdf_engines.docx_to_pdf_word if opts.pdf_engine == "word"
+                           else pdf_engines.docx_to_pdf_libreoffice)
+                convert(doc, pdf)
+        except pdf_engines.PdfEngineError as e:
+            keep = True
+            raise pdf_engines.PdfEngineError(f"{e}\nThe temp folder was kept for inspection: {tmp}")
+        shutil.copyfile(pdf, output)
+        return problems
+    finally:
+        if not keep:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+BUILDERS = {".docx": build_docx, ".md": build_md, ".html": build_html, ".htm": build_html,
+            ".pdf": build_pdf}
 
 
 def read_css(path: Path) -> str:
@@ -513,20 +567,26 @@ def read_css(path: Path) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build a tutorial (.docx, .md, or .html, from the --output extension) "
+        description="Build a tutorial (.docx, .md, .html, or .pdf, from the --output extension) "
                     "from a steps JSON file.")
     parser.add_argument("--title",  required=True, help="Document title")
     parser.add_argument("--steps",  required=True, help="Path to the UTF-8 steps JSON file")
     parser.add_argument("--output", required=True,
-                        help="Output path ending in .docx, .md, or .html; parent folders are created")
+                        help="Output path ending in .docx, .md, .html, or .pdf; parent folders are created")
     parser.add_argument("--template", metavar="FILE",
                         help="A .docx or .dotx whose styles, page setup, headers, and footers the "
-                             ".docx output uses; its body is cleared")
+                             ".docx output and the Word or LibreOffice .pdf output use; its body "
+                             "is cleared")
     parser.add_argument("--style", metavar="FILE",
                         help="Style file (JSON); only its \"document\" section is used: fonts, sizes, "
                              "colors, alignment, and page setup")
     parser.add_argument("--css", metavar="FILE",
-                        help="CSS file added after the built-in and style-file CSS (.html output only)")
+                        help="CSS file added after the built-in and style-file CSS (.html output, and "
+                             ".pdf output built with Chrome)")
+    parser.add_argument("--pdf-engine", choices=("auto",) + pdf_engines.ENGINES,
+                        help="Program that makes a .pdf (default auto: Word, then LibreOffice, "
+                             "then Chrome or Edge; Chrome first when --css is given without "
+                             "--template). Only used for .pdf output")
     args = parser.parse_args()
 
     output = Path(args.output)
@@ -548,14 +608,30 @@ def main():
             opts.style = sections["document"]
         if args.css:
             opts.css = read_css(Path(args.css))
-            if ext not in (".html", ".htm"):
-                print(f"[warn] --css applies to .html output; ignored for {ext}", file=sys.stderr)
-        if opts.template and output.suffix.lower() == ".docx":
+            if ext not in (".html", ".htm", ".pdf"):
+                print(f"[warn] --css applies to .html output (and .pdf output built with "
+                      f"Chrome); ignored for {ext}", file=sys.stderr)
+        if args.pdf_engine and ext != ".pdf":
+            print("[warn] --pdf-engine applies to .pdf output; ignored", file=sys.stderr)
+        if ext == ".pdf":
+            found = pdf_engines.find_engines()  # through the module, so tests can replace it
+            opts.pdf_engine = pdf_engines.pick_engine(
+                args.pdf_engine or "auto", found,
+                prefer_chrome=bool(args.css) and not opts.template)
+            opts.pdf_program = found[opts.pdf_engine]
+            if args.css and opts.pdf_engine != "chrome":
+                print(f"[warn] --css applies to .pdf output only with the chrome engine; "
+                      f"ignored with {opts.pdf_engine}", file=sys.stderr)
+        uses_template = ext == ".docx" or (ext == ".pdf" and opts.pdf_engine != "chrome")
+        if opts.template and uses_template:
             opts.document = open_template(opts.template)
+        elif opts.template and ext == ".pdf":
+            print("[warn] --template is ignored for .pdf output built with chrome; use "
+                  "--pdf-engine word or libreoffice for a template", file=sys.stderr)
         elif opts.template:
-            print(f"[warn] --template applies to .docx and .pdf output; ignored for "
-                  f"{output.suffix.lower()}", file=sys.stderr)
-    except (StepsError, StyleError) as e:
+            print(f"[warn] --template applies to .docx and .pdf output; ignored for {ext}",
+                  file=sys.stderr)
+    except (StepsError, StyleError, pdf_engines.PdfEngineError) as e:
         for line in str(e).splitlines():
             print(f"[error] {line}", file=sys.stderr)
         print("[error] Nothing was written.", file=sys.stderr)
@@ -564,6 +640,10 @@ def main():
     try:
         output.parent.mkdir(parents=True, exist_ok=True)
         problems = builder(args.title, steps, output, opts)
+    except pdf_engines.PdfEngineError as e:
+        for line in str(e).splitlines():
+            print(f"[error] {line}", file=sys.stderr)
+        sys.exit(1)
     except PermissionError:
         print(f"[error] cannot write {output}: permission denied. If it is open in Word "
               "or another program, close it and run again.", file=sys.stderr)
@@ -572,7 +652,7 @@ def main():
         print(f"[error] cannot write {output}: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Saved: {output}")
+    print(f"Saved: {output}" + (f" (engine: {opts.pdf_engine})" if ext == ".pdf" else ""))
     if problems:
         for p in problems:
             print(f"[error] {p}", file=sys.stderr)
